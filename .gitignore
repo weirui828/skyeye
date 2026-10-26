@@ -1,0 +1,12 @@
+.build/
+build/
+.swiftpm/
+*.xcodeproj
+.DS_Store
+.env
+.env.*
+!.env.example
+xcuserdata/
+*.xcuserstate
+__pycache__/
+*.py[cod]
