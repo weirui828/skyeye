@@ -29,22 +29,18 @@ Point at a service card to find its start, stop, restart, URL, logs, and edit bu
 
 ## Try it on your Mac
 
-You'll need **macOS 14 or later, an Apple Silicon Mac, and Xcode 15.3 or later** to build from source.
+Requires **macOS 14 or later and an Apple Silicon Mac**. No Xcode needed.
 
-```bash
-git clone https://github.com/weirui828/skyeye.git
-cd skyeye
-./scripts/install.sh
-```
+1. **[Download SkyEye from Releases](https://github.com/weirui828/skyeye/releases)** — choose the `.dmg` file from the newest release.
+2. Open the DMG and drag **SkyEye.app** into **Applications**.
+3. Open SkyEye from Applications.
 
-The installer builds and opens SkyEye, installs it in `~/Applications`, and links its command-line tools in `~/.local/bin`.
+**Developer preview:** packages aren't notarized, so macOS may block the download or app. Prefer building it yourself? See [build from source](README.md#build-and-install-from-source).
 
 1. Open the **telescope icon** in your menu bar.
 2. Select **Add service**. Give it a name, its usual start command (for example, `npm run dev`), and its project folder. Add a port if it uses one.
 3. Save, then point at the card and select **Start**.
 4. Add your other services. Set dependencies in the service editor or connect them on the canvas.
-
-**Early developer preview:** the interface can change. See the [build and installation reference](README.md#build-and-install-from-source) for more detail.
 
 ## Let your agent help
 

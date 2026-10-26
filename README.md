@@ -19,8 +19,8 @@ Check the CI results before you use a new build.
 - Xcode 15.3 or later to build from source.
 
 A packaged app does not need Xcode.
-No notarized public release is available yet.
-For now, use the source build instructions.
+Packaged developer previews are available on the [Releases page](https://github.com/weirui828/skyeye/releases).
+They are not notarized; macOS may block downloaded copies.
 
 ## Screenshots
 
@@ -61,7 +61,7 @@ open build/SkyEye.app
 
 ## Install a packaged app
 
-Use these steps when a notarized package is available on the [Releases page](https://github.com/weirui828/skyeye/releases):
+Download a packaged developer preview from the [Releases page](https://github.com/weirui828/skyeye/releases):
 
 1. Download the DMG file.
 2. Open the DMG file.
