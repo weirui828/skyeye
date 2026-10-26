@@ -1,5 +1,8 @@
 # SkyEye
 
+> **Human? Read [HUMAN.md](HUMAN.md).** This README is for coding agents.
+> The human guide has a visual overview, demo video, screenshots, and a quick start.
+
 SkyEye manages local development services on macOS.
 Start and stop services from the menu bar.
 Use the canvas to see which services depend on other services.
