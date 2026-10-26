@@ -3,7 +3,6 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-export UNIVERSAL="${UNIVERSAL:-1}"
 export CONFIG=release
 if [[ -n "${NOTARY_PROFILE:-}" && "${SIGNING_IDENTITY:--}" == "-" ]]; then
     echo "Notarization requires SIGNING_IDENTITY to be a Developer ID Application identity." >&2
@@ -13,17 +12,14 @@ fi
 ./scripts/build.sh
 APP="build/SkyEye.app"
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
-ARCH="$(uname -m)"
-if [[ "$UNIVERSAL" == "1" ]]; then
-    ARCH="universal"
-    for executable in SkyEye sky skyeye-mcp skyeye-logwriter; do
-        ARCHS="$(/usr/bin/lipo -archs "$APP/Contents/MacOS/$executable")"
-        if [[ " $ARCHS " != *" arm64 "* || " $ARCHS " != *" x86_64 "* ]]; then
-            echo "$executable is missing a required architecture: $ARCHS" >&2
-            exit 1
-        fi
-    done
-fi
+ARCH="arm64"
+for executable in SkyEye sky skyeye-mcp skyeye-logwriter; do
+    ARCHS="$(/usr/bin/lipo -archs "$APP/Contents/MacOS/$executable")"
+    if [[ "$ARCHS" != "arm64" ]]; then
+        echo "$executable must contain only arm64: $ARCHS" >&2
+        exit 1
+    fi
+done
 NAME="SkyEye-$VERSION-$ARCH"
 ZIP="build/$NAME.zip"
 DMG="build/$NAME.dmg"
@@ -43,6 +39,7 @@ ditto "$APP" "$STAGING/SkyEye.app"
 ln -s /Applications "$STAGING/Applications"
 cp LICENSE "$STAGING/LICENSE.txt"
 cat > "$STAGING/Install.txt" <<'TEXT'
+Requires an Apple Silicon Mac with macOS 14 or later. Intel Macs are not supported.
 Drag SkyEye.app into Applications, then open it from Applications.
 SkyEye lives in the menu bar. The telescope icon opens your services.
 For updates, quit SkyEye before replacing the app. Canceling the quit keeps it running.

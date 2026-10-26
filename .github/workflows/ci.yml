@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, macos-15-intel]
+        os: [macos-15]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
@@ -60,7 +60,7 @@ jobs:
         run: ./scripts/build.sh
 
   package:
-    name: Package universal app
+    name: Package Apple Silicon app
     needs: test
     if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.test_filter == '')
     runs-on: macos-15
@@ -74,7 +74,7 @@ jobs:
       - name: Upload developer preview packages
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: SkyEye-universal-developer-preview
+          name: SkyEye-arm64-developer-preview
           path: |
             build/SkyEye-*.dmg
             build/SkyEye-*.zip
