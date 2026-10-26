@@ -1,7 +1,8 @@
 # Preparing a Mac release
 
-SkyEye is an early developer preview. Keep the repository and releases private until
-the maintainer explicitly chooses to publish them.
+SkyEye is an early developer preview with a public source repository.
+Review each package before you publish a release. Public source does not mean that
+a package is signed or notarized.
 
 ## Verify
 

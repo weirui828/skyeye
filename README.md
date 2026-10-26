@@ -1,45 +1,172 @@
 # SkyEye
 
-A macOS menu bar app that keeps an eye on your local dev services: it starts and stops
-them, watches their ports and health checks, keeps their logs, and lets you (via `sky`) or
-your coding agent (via MCP) control everything. Open SkyEye from the menu bar to manage
-services in the card-based menu. The **Canvas** button opens an optional dependency window.
+SkyEye manages local development services on macOS.
+Start and stop services from the menu bar.
+Use the canvas to see which services depend on other services.
 
 [![macOS CI](https://github.com/weirui828/skyeye/actions/workflows/ci.yml/badge.svg)](https://github.com/weirui828/skyeye/actions/workflows/ci.yml)
 
-**Early developer preview.** Expect rough edges and changes to the UI. macOS 14 or
-newer is required. The app supports Apple Silicon and Intel Macs.
+**SkyEye is an early developer preview.** The interface can change.
+Check the CI results before you use a new build.
+
+## Requirements
+
+- macOS 14 or later.
+- An Apple Silicon or Intel Mac.
+- Xcode 15.3 or later to build from source.
+
+A packaged app does not need Xcode.
+No notarized public release is available yet.
+For now, use the source build instructions.
 
 ## Screenshots
 
-Native SkyEye views with demonstration services, using a separate demo configuration.
+These screenshots use demo services.
 
-<img src="docs/images/service-menu.png" alt="SkyEye service cards with grouped services, live usage, and a Canvas button" width="400">
+<img src="docs/images/service-menu.png" alt="Service cards in the SkyEye menu" width="400">
 
-![Dependency canvas with apps above their shared dependencies](docs/images/dependency-canvas.png)
+![Apps above their dependencies in the SkyEye canvas](docs/images/dependency-canvas.png)
 
-## Install the Mac app
+## Build and install from source
 
-A packaged release does not require Xcode, a terminal, or `install.sh`:
+1. Install Xcode with Swift 5.10 or later and the macOS SDK.
+2. Clone this repository.
 
-1. Download the DMG from [Releases](https://github.com/weirui828/skyeye/releases) when a
-   signed release is available.
-2. Open the DMG and drag **SkyEye.app** into **Applications**.
-3. Open SkyEye from Applications. Its telescope icon appears in the menu bar.
-4. Add a service with its start command and directory. Open **Canvas** to connect dependencies.
+   ```bash
+   git clone https://github.com/weirui828/skyeye.git
+   cd skyeye
+   ```
 
-**No notarized public download has been published yet.** Current CI artifacts are
-ad-hoc signed developer builds, which macOS may block when downloaded. Use the source
-build below until a signed, notarized release is available.
+3. Run the installer.
 
-To update a packaged app, quit SkyEye and replace it in Applications with the newer
-version. Your services and logs are stored separately and remain intact. There is
-no automatic updater yet.
+   ```bash
+   ./scripts/install.sh
+   ```
 
-### Optional command-line tools
+4. Open the telescope icon in the menu bar.
 
-The app and the AI agent setup in Settings work without installing CLI links. To make
-`sky` and `skyeye-mcp` available in your terminal after installing in Applications:
+The installer puts the app in `~/Applications`.
+It also creates links for `sky` and `skyeye-mcp` in `~/.local/bin`.
+If you cancel the quit prompt, the installer stops without replacing the app.
+
+To build without installation, use these commands:
+
+```bash
+./scripts/build.sh
+open build/SkyEye.app
+```
+
+## Install a packaged app
+
+Use these steps when a notarized package is available on the [Releases page](https://github.com/weirui828/skyeye/releases):
+
+1. Download the DMG file.
+2. Open the DMG file.
+3. Drag **SkyEye.app** into **Applications**.
+4. Open SkyEye from Applications.
+5. Open the telescope icon in the menu bar.
+
+CI packages are developer builds. They are not notarized.
+macOS can block these downloads.
+
+### Update the app
+
+1. Quit SkyEye.
+2. Replace the app in Applications with the new version.
+3. Open the new version.
+
+Your service definitions and logs stay in your Library folders.
+SkyEye does not have an automatic updater.
+
+## Add a service
+
+1. Select **Add service** above the service cards.
+2. Enter a name and a start command.
+3. Select the working directory.
+4. Enter the port, if the service uses one.
+5. Select **Save**.
+
+Point at a service card to show its action buttons.
+Use these buttons to start, stop, or restart the service.
+You can also open its URL, read its logs, or edit its settings.
+
+To monitor a service without starting it, set its port and leave the command empty.
+SkyEye calls this a *monitor-only service*.
+
+## Start services when SkyEye opens
+
+Open **Settings → General → Start with SkyEye**.
+Select one option:
+
+| Option | Result |
+| --- | --- |
+| None | SkyEye does not start services. This is the default. |
+| Selected services | SkyEye starts the services that you select. |
+| All services | SkyEye starts all services with a start command, including services added later. |
+
+The setting applies the next time SkyEye opens.
+Commands still need approval. Dependencies start first.
+SkyEye uses services that are already running.
+It does not start monitor-only services.
+
+## Set service dependencies
+
+A dependency is a service that another service needs.
+For example, an API can depend on PostgreSQL.
+
+1. Edit the API service.
+2. Open the **Dependencies** tab.
+3. Select the PostgreSQL service.
+4. Select **Save**.
+
+When you start the API, SkyEye starts PostgreSQL first.
+It waits for the port and health check, if configured.
+Then it starts the API.
+If PostgreSQL fails, the API does not start.
+SkyEye leaves other started dependencies running.
+
+A service without a port counts as ready when its process starts.
+A monitor-only dependency must already be running.
+
+### Use the canvas
+
+Select **Canvas** above the service cards.
+Apps appear above their dependencies. Arrows point upward, toward the apps.
+Each shared dependency appears once.
+
+- Drag a card's top bar to move it.
+- Drag the empty canvas to move the view.
+- Use the zoom buttons or **Fit** to change the view.
+- Select **Arrange all** to restore the automatic layout.
+
+To add a dependency, drag its connector onto the service that needs it.
+You can also select the dependency's connector, then the other service's connector.
+Use a card's dependency menu to remove a connection.
+
+SkyEye rejects dependency cycles and connections from a service to itself.
+It saves card positions between launches.
+Changes to dependencies move affected cards automatically.
+
+Stopping a service leaves its dependencies running.
+In the canvas, SkyEye asks before it stops a dependency with active dependent services.
+
+## Read resource use
+
+The status badge changes every five seconds.
+It shows CPU and memory use for the computer, SkyEye, or running services.
+The laptop, telescope, and stacked-box icons identify each view.
+Point at the badge to pause the cycle and see its short description.
+
+CPU readings in the badge use total computer capacity.
+CPU readings on individual service cards use one core as 100 percent.
+
+## Use the command-line tools
+
+The source installer creates the command-line links.
+For a packaged app, the links are optional.
+The app and its AI agent setup work without them.
+
+To create links for an app in Applications, run these commands:
 
 ```bash
 mkdir -p "$HOME/.local/bin"
@@ -48,100 +175,44 @@ ln -sfn /Applications/SkyEye.app/Contents/MacOS/skyeye-mcp "$HOME/.local/bin/sky
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-Add the PATH line to your shell profile if needed. If you installed the app elsewhere,
-use that location in the links. Settings generates agent setup commands from the
-actual installed app path, so no particular username or install directory is required.
+Use the actual app location if you installed it elsewhere.
+Add the PATH line to your shell profile if necessary.
 
-## Build from source
-
-Requires Xcode 15.3+ with Swift 5.10+ and the macOS SDK.
+### Common commands
 
 ```bash
-git clone https://github.com/weirui828/skyeye.git
-cd skyeye
-./scripts/install.sh
-```
-
-The installer builds the app, copies it to `~/Applications`, and links `sky` and
-`skyeye-mcp` into `~/.local/bin`. Canceling the app's quit prompt aborts installation;
-it never force-quits SkyEye. To build without installing:
-
-```bash
-./scripts/build.sh
-open build/SkyEye.app
-```
-
-### Tests and packages
-
-```bash
-swift test --disable-sandbox
-python3 -m unittest discover -s scripts/tests -v
-./scripts/package.sh                 # universal .app, .dmg, .zip, and SHA-256 checksums
-swift scripts/make-icon.swift        # regenerate bundled icon artwork
-```
-
-Generated packages stay under `build/` and are ignored by Git. CI tests Apple Silicon
-and Intel builds and uploads universal developer preview packages for review.
-See [Preparing a Mac release](docs/RELEASING.md) for signing and notarization.
-
-## CLI
-
-```bash
-sky add api --cmd "npm run dev" --port 3000 --health /health --group shop   # dir defaults to $PWD
-sky start api          # waits until the port is open and the health check passes
-sky start @shop        # every service in a group
+sky add api --cmd "npm run dev" --port 3000 --health /health --group shop
+sky start api
+sky stop api
+sky start @shop
 sky list
 sky logs api -f
-sky port 3000 --kill   # free a port held by something else
 sky edit api --port 3001 --env DEBUG=1
 ```
 
-`sky --help` lists everything.
+For `sky add`, the current directory is the default working directory.
+Use `@group` to control a group of services.
+Run `sky --help` to see all commands and options.
 
-## Dependency canvas
-
-**Settings → General → Start with SkyEye** chooses which services start when the app
-opens: None (default), Selected services, or All services. Selections apply on the
-next app launch, include dependencies, and still require command approval. All services
-includes services added later; monitor-only services are skipped. Already-running services
-are reused, including services taken back over after quitting with keep-running enabled.
-
-The menu remains the default view. Click **Canvas** above the service cards to open a
-movable, zoomable DAG in a larger window. Closing the canvas returns you to the menu bar app.
-The canvas shows service cards. Arrows point from a
-prerequisite to its dependent: `psql → api → vibecab`. Shared prerequisites appear once.
-Group names stay on cards; the Groups menu starts or stops services in a group.
-
-- Drag a card's top bar to move it; drag the empty canvas to pan. Use zoom and **Fit**
-  to navigate. Positions are remembered between launches.
-- Drag a service's connector onto a dependent card to create a dependency. Alternatively,
-  click the source connector, then click the target connector. Self-links and cycles are rejected.
-- The dependency menu on a card removes links. The service editor also has a **Depends on** picker.
-- Dependency changes automatically arrange the affected cards and their dependents, leaving
-  unrelated cards in place. **Arrange all** restores the vertical layout, with apps above their dependencies and arrows pointing upward.
-- Hover over a card for start/stop, restart, browser, logs, and edit/approval actions.
-
-Dependencies also work through the CLI and MCP:
+To set dependencies from the terminal, use these commands:
 
 ```bash
-sky edit vibecab --depends-on psql,redis
-sky start vibecab --timeout 180
-sky edit vibecab --depends-on none
+sky edit api --depends-on postgres,redis
+sky start api --timeout 180
+sky edit api --depends-on none
 ```
 
-MCP `add_service` and `update_service` accept `dependencies: ["psql", "redis"]`.
-Starting a service starts its prerequisites recursively and waits for each to become ready
-(port open and health check passing, when configured). Already-running prerequisites are
-reused. Workers without a port count as ready once spawned. Monitor-only prerequisites
-must already be running externally. Every command in the chain must be approved.
-If a prerequisite fails or times out, the dependent stays stopped with a startup error;
-successfully started prerequisites are left running for other services to reuse.
+## Connect an AI agent
 
-Stopping an app leaves its prerequisites running. On the canvas, stopping a prerequisite
-with active dependents asks to stop those dependents first. Renaming a service updates
-its dependency links; remove incoming links before deleting a service.
+1. Open **Settings → AI agents**.
+2. Select your agent.
+3. Copy the setup command or configuration.
+4. Apply it in your agent.
 
-## AI agents (MCP)
+SkyEye uses the installed app location in these instructions.
+They do not contain a fixed username or home directory.
+
+If `skyeye-mcp` is on your PATH, you can use these commands:
 
 ```bash
 claude mcp add skyeye -- skyeye-mcp
@@ -149,56 +220,85 @@ codex mcp add skyeye -- skyeye-mcp
 gemini mcp add skyeye skyeye-mcp
 ```
 
-Tools: `list_services`, `get_service`, `add_service`, `update_service`, `remove_service`,
-`start_service`, `stop_service`, `restart_service`, `get_logs`, `check_port`.
-`start_service` waits for the service to come up and returns the last log lines if it fails.
+SkyEye uses the Model Context Protocol (MCP) to expose service controls.
+Available tools include:
 
-## Approval
+- `list_services`, `get_service`, `add_service`, and `update_service`.
+- `remove_service`, `start_service`, `stop_service`, and `restart_service`.
+- `get_logs` and `check_port`.
 
-A service added or changed from the CLI or MCP can't run until you click **Approve** in the
-app (you get a notification). Approval is tied to the command, directory and
-environment, so changing any of them asks again. Services you add in the app are approved
-automatically. You can turn this off in Settings, but anything that can add a service could
-then run commands on your machine.
+The add and update tools accept a `dependencies` list of service names.
+The start tool can wait for readiness and return logs after a failure.
 
-## How it works
+## Keep command approval enabled
 
-- **SkyEyeCore**: config, process management, port/health probes, and a control API on a
-  Unix socket (`~/Library/Application Support/SkyEye/skyeye.sock`, owner-only).
-- **SkyEyeApp**: the card-based menu and optional dependency canvas; hosts the core and socket server.
-- **sky** / **skyeye-mcp**: thin clients of the socket. They launch the app if it isn't running.
+SkyEye runs shell commands with your user permissions.
+A new command from the terminal or an AI agent needs your approval.
+Changes to its command, directory, or environment need approval again.
+Services that you add in the app are approved when you save them.
 
-Commands run through your login shell (`zsh -i -l -c`) in their own session, so nvm/asdf/mise
-work and stopping a service also stops everything it spawned. Quitting SkyEye stops the
-services it started, unless **Keep services running when SkyEye quits** is on in Settings
-(`keepRunningOnQuit` in config.json): then they keep running and SkyEye takes them back over
-the next time it opens.
+Leave command approval enabled in **Settings → Advanced**.
+Review the command before you approve it.
+The local control socket accepts connections only from your user account.
+It does not protect you from malicious software already running as your user.
 
-Status: `starting` until the port opens (and the health check passes, if set), then
-`running`; `unhealthy` if it stops responding; `crashed` on a non-zero exit (auto-restart
-optional, 5 attempts with backoff); `external` when the port is held by a process SkyEye didn't
-start.
+Report security issues privately. Read the [security policy](SECURITY.md) for instructions.
 
-Files:
-- Config: `~/Library/Application Support/SkyEye/config.json`
-- Logs: `~/Library/Logs/SkyEye/<name>.log`
+## Keep services running when you quit
 
-## Log retention
+By default, quitting SkyEye stops the services it started.
+To leave them running, enable **Settings → General → Keep services running when SkyEye quits**.
+SkyEye takes control of those processes again when it next opens.
 
-**Settings → Logs → Retention** offers 1 day, **7 days** (default), 30 days, or
-Keep forever. Cleanup runs when SkyEye starts, hourly while it is running, and when
-the setting changes. It removes expired archives and inactive logs, preserving active logs.
+## Set log retention
 
-Services started by the updated app rotate their output daily, on the first output
-after midnight. Archives are stored under `~/Library/Logs/SkyEye/archive/<name>/`.
-The log viewer and `sky logs` include recent archived history; `sky logs -f` follows
-the current log across rotation. Services left running when SkyEye quits continue
-logging and rotating; cleanup resumes when SkyEye reopens. Existing services pick up
-daily rotation on their next restart.
+Open **Settings → Logs → Retention**.
+Select 1 day, 7 days, 30 days, or **Keep forever**.
+The default is 7 days.
 
-Service definitions and logs live outside this Git repository and are not included
-when pushing the repository to GitHub.
+SkyEye deletes expired archives and inactive logs.
+It keeps active logs.
+Cleanup runs at app startup, each hour, and when you change the setting.
 
-## License
+Logs rotate daily, on the first output after midnight.
+Existing services use daily rotation after their next restart.
+The log viewer and `sky logs` include recent archives.
+`sky logs -f` follows the current log across rotation.
 
-[MIT](LICENSE)
+Services left running after SkyEye quits continue to write and rotate logs.
+Cleanup resumes when SkyEye opens again.
+
+## Find local data
+
+| Data | Location |
+| --- | --- |
+| Service definitions and app settings | `~/Library/Application Support/SkyEye/config.json` |
+| Current service log | `~/Library/Logs/SkyEye/<name>.log` |
+| Archived service logs | `~/Library/Logs/SkyEye/archive/<name>/` |
+
+These locations are outside this repository.
+Git does not include them when you push the repository.
+Configuration files can contain secrets in environment variables.
+Do not attach configuration files or raw logs to public issues.
+
+## Test and package
+
+```bash
+swift test --disable-sandbox
+python3 -m unittest discover -s scripts/tests -v
+./scripts/package.sh
+```
+
+The package script creates a universal app, a DMG, a ZIP, and SHA-256 checksums.
+Generated files stay under `build/`. Git ignores this directory.
+The CI workflow tests Apple Silicon and Intel builds.
+It creates developer packages only after the tests pass.
+
+See [Preparing a Mac release](docs/RELEASING.md) for signing and notarization instructions.
+See [Repository protection](docs/REPOSITORY-SECURITY.md) for maintainer settings.
+
+## Maintainer and license
+
+[Wei Rui (@weirui828)](https://github.com/weirui828) maintains SkyEye.
+
+Copyright (c) 2026 Wei Rui. Released under the [MIT License](LICENSE).
