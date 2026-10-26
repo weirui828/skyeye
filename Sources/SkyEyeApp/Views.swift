@@ -26,7 +26,7 @@ struct MenuContentView: View {
         }
         .frame(width: route == .settings ? 480 : 400)
         .fixedSize(horizontal: false, vertical: true)
-        .background(MenuMaterial().ignoresSafeArea())
+        .background(SkyEyeSurface.background.ignoresSafeArea())
         .background(GeometryReader { proxy in WindowFitter(size: proxy.size) })
     }
 }
@@ -54,17 +54,19 @@ struct WindowFitter: NSViewRepresentable {
 
 // MARK: Shared bits
 
-/// The translucent material system menus use; follows light/dark mode.
-struct MenuMaterial: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.material = .menu
-        view.blendingMode = .behindWindow
-        view.state = .active
-        return view
-    }
+/// Opaque surfaces keep light mode bright without picking up the desktop's tint.
+/// Dynamic colors continue to follow the system appearance.
+enum SkyEyeSurface {
+    static let background = adaptive(light: 0.985, dark: 0.12)
+    static let card = adaptive(light: 1.0, dark: 0.17)
+    static let group = adaptive(light: 0.965, dark: 0.145)
 
-    func updateNSView(_ view: NSVisualEffectView, context: Context) {}
+    private static func adaptive(light: CGFloat, dark: CGFloat) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            return NSColor(white: isDark ? dark : light, alpha: 1)
+        })
+    }
 }
 
 /// An inset separator, like the ones between groups in a system menu.
@@ -345,7 +347,7 @@ struct ServiceListView: View {
                                     }
                                 }
                                 .padding(9)
-                                .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 13))
+                                .background(SkyEyeSurface.group, in: RoundedRectangle(cornerRadius: 13))
                                 .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(Color.primary.opacity(0.07)))
                             } else {
                                 ForEach(section.items) { snapshot in
@@ -548,14 +550,14 @@ struct ServiceCard: View {
                     moreMenu
                 }
                 .padding(.leading, 6)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
+                .background(SkyEyeSurface.card, in: RoundedRectangle(cornerRadius: 6))
                 .opacity(hovering ? 1 : 0)
                 .allowsHitTesting(hovering)
             }
             .frame(minHeight: 24)
         }
         .padding(12)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .background(SkyEyeSurface.card, in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(hovering ? 0.18 : 0.08)))
         .contentShape(RoundedRectangle(cornerRadius: 10))
         .onHover { hovering = $0 }

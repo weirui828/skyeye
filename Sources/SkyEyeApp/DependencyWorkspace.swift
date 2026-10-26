@@ -76,7 +76,7 @@ struct DependencyWorkspace: View {
             }
             GeometryReader { geometry in
                 ZStack(alignment: .topLeading) {
-                    Color(nsColor: .windowBackgroundColor)
+                    SkyEyeSurface.background
                         .contentShape(Rectangle())
                         .gesture(DragGesture().onChanged { value in
                             if panOrigin == nil { panOrigin = pan }
@@ -124,7 +124,7 @@ struct DependencyWorkspace: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .padding(8)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                    .background(SkyEyeSurface.card, in: RoundedRectangle(cornerRadius: 10))
                     .padding(16)
                 }
             }
@@ -137,6 +137,7 @@ struct DependencyWorkspace: View {
             .font(.caption).foregroundStyle(.secondary).padding(10)
         }
         .frame(minWidth: 800, minHeight: 520)
+        .background(SkyEyeSurface.background)
         .onAppear {
             positions = (try? JSONDecoder().decode([String: NodePoint].self, from: savedPositions)) ?? [:]
             arrange(all: layoutVersion < 2)
@@ -272,7 +273,7 @@ struct DependencyWorkspace: View {
         }
         .padding(6)
         .frame(width: cardWidth, height: cardHeight, alignment: .top)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .background(SkyEyeSurface.group, in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(
             connectionSource == snapshot.service.name || dropTarget == snapshot.service.name ? Color.accentColor : Color.primary.opacity(0.08),
             lineWidth: connectionSource == snapshot.service.name || dropTarget == snapshot.service.name ? 2 : 1))
