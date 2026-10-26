@@ -102,8 +102,23 @@ final class ProcessTests: XCTestCase {
 final class ManagerTests: XCTestCase {
     private func httpServerCommand(port: Int) -> String {
         let python = ProcessInfo.processInfo.environment["SKYEYE_TEST_PYTHON"] ?? "python3"
-        let quoted = "'" + python.replacingOccurrences(of: "'", with: "'\\''") + "'"
-        return "exec " + quoted + " -u -m http.server \(port) --bind 127.0.0.1"
+        func quote(_ value: String) -> String {
+            "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        }
+        // HTTPServer's reverse-DNS lookup can stall before listen() on hosted macOS runners.
+        // The fixture only needs loopback HTTP: https://github.com/actions/runner-images/issues/14409
+        let script = """
+        import http.server, socketserver, sys
+        class LoopbackServer(http.server.ThreadingHTTPServer):
+            def server_bind(self):
+                socketserver.TCPServer.server_bind(self)
+                self.server_name = "localhost"
+                self.server_port = self.server_address[1]
+        server = LoopbackServer(("127.0.0.1", int(sys.argv[1])), http.server.SimpleHTTPRequestHandler)
+        print("Loopback HTTP fixture ready", flush=True)
+        server.serve_forever()
+        """
+        return "exec " + quote(python) + " -u -c " + quote(script) + " " + String(port)
     }
 
     private func makeManager() throws -> (ServiceManager, URL) {

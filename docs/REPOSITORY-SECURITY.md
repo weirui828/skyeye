@@ -33,8 +33,8 @@ Do not rewrite public history for routine changes.
 
 ### Require CI after it passes
 
-The hosted service-readiness tests currently fail.
-Investigate those failures before you make the checks mandatory.
+Confirm both hosted test jobs pass before you make the checks mandatory.
+Investigate any failures before you merge a change.
 Do not remove the tests only to obtain a successful result.
 
 After the failures are fixed, require these checks:
