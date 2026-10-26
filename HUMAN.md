@@ -6,15 +6,7 @@ Your web app, API, database, and background worker can live in different project
 
 Built natively for macOS. Open source. Works with your terminal and AI coding agents, too.
 
-**[Watch the demo](docs/videos/skyeye-demo.mp4)** · **[Try it](#try-it-on-your-mac)** · **[Connect your agent](#let-your-agent-help)**
-
-## Take a 35-second tour
-
-<a href="docs/videos/skyeye-demo.mp4"><img src="docs/images/video-poster.png" alt="Watch the SkyEye demo: Vibe coding? What's still running?" width="360"></a>
-
-**[▶ Watch the demo with narration and captions](docs/videos/skyeye-demo.mp4)**
-
-See the service list, live logs, dependency canvas, and an example of registering a service through an AI agent. The video uses demo services and timed actions in a dedicated capture app built from SkyEye's native views.
+**[Try it](#try-it-on-your-mac)** · **[Connect your agent](#let-your-agent-help)**
 
 ## Your services, at a glance
 
@@ -34,22 +26,6 @@ Point at a service card to find its start, stop, restart, URL, logs, and edit bu
 ## See how your stack fits together
 
 ![SkyEye dependency canvas: PostgreSQL and Redis feed the API, the API feeds the web app, and Redis also feeds a worker](docs/images/dependency-canvas.png)
-
-*Apps sit above their dependencies. Shared dependencies appear once.*
-
-Drag cards to arrange the canvas. Connect services to define dependencies. For example:
-
-```mermaid
-graph BT
-    postgres[PostgreSQL] --> api[API]
-    redis[Redis] --> api
-    api --> web[Web app]
-    redis --> worker[Background worker]
-```
-
-**Start the web app → SkyEye starts PostgreSQL and Redis, waits for the API to become ready, then starts the web app.**
-
-Arrows point from a dependency to the service that needs it. SkyEye uses ports and optional health checks to decide when a service is ready. If a dependency fails, the services waiting on it won't start. Stopping your web app leaves its dependencies running.
 
 ## Try it on your Mac
 
@@ -77,17 +53,6 @@ Open **Settings → AI agents**, select your agent, and copy its setup instructi
 For example, ask your connected agent:
 
 > Register this project in SkyEye as `my-app`. Use `npm run dev`, this project folder, and port 3000.
-
-**You approve new commands added by an agent before they run.** Keep command approval enabled in Settings → Advanced.
-
-Prefer the terminal? After installation, with `~/.local/bin` on your PATH:
-
-```bash
-sky list
-sky start my-app
-sky logs my-app -f
-sky stop my-app
-```
 
 ## A few things to know
 
