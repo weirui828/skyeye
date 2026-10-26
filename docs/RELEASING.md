@@ -40,19 +40,22 @@ private key, app-specific password, or notarization credential to Git.
 
 ## Publish from GitHub
 
-1. Open **Actions → macOS CI → Run workflow**.
-2. Select the `main` branch and enable **Publish a release after tests and packaging**.
-3. Optionally enter a version such as `0.2.1` or `1.0.0`. It must be higher
-   than all existing version tags. Leave it blank to increment the latest patch.
+1. Open a version-bump PR that updates `CFBundleShortVersionString` in
+   `Resources/Info.plist` to the intended version, such as `0.1.1`, `0.2.1`, or
+   `1.0.0`. The version must be higher than the latest `vMAJOR.MINOR.PATCH` tag.
+2. Merge the PR after CI passes.
+3. Open **Actions → macOS CI → Run workflow**, select `main`, and enable
+   **Publish a release after tests and packaging**.
 4. Click **Run workflow**.
 
 The workflow runs the full tests, builds the Apple Silicon packages, verifies their
 checksums, and publishes a developer prerelease with the DMG, ZIP, and checksum file.
-The workflow reads existing `vMAJOR.MINOR.PATCH` tags and uses the selected version,
-or increments the highest patch version when none was entered. The chosen version
-is written into the packaged app and release tag. The source plist remains the
-version used for local builds. Release notes are created automatically. If another
-run creates the same tag while packaging is in progress, rerun the workflow.
+`CFBundleShortVersionString` in the merged plist is the single source for the
+packaged app version and GitHub release tag. Before packaging a release, the
+workflow checks that it is higher than every existing version tag. If it is not,
+the workflow stops before packaging and asks for a version-bump PR. Release notes
+are created automatically. If another run creates the same tag while packaging is
+in progress, merge a version-bump PR and rerun from `main`.
 
 Ordinary pushes and manual runs with the release option disabled only produce CI
 artifacts. Pull requests run tests and build the app without packaging or publishing.

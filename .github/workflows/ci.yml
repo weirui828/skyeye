@@ -7,13 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       publish_release:
-        description: Publish a release after tests and packaging (main only; version can be automatic or specified)
+        description: Publish a release after tests and packaging (main only; first merge a version bump PR)
         type: boolean
         default: false
-        required: false
-      release_version:
-        description: Optional explicit version (for example, 0.2.1 or 1.0.0); must be higher than existing tags
-        type: string
         required: false
 
 permissions:
@@ -71,37 +67,43 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      RELEASE_VERSION_OVERRIDE: ${{ inputs.release_version }}
+      PUBLISH_RELEASE: ${{ inputs.publish_release }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - name: Set next release version
+      - name: Read and validate app version
         id: version
         run: |
-          VERSION="$(gh api --paginate "repos/$GH_REPO/git/matching-refs/tags/v" --jq '.[].ref' | python3 -c '
-          import os, re, sys
-          versions = []
-          for ref in sys.stdin:
+          VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "CFBundleShortVersionString must use MAJOR.MINOR.PATCH." >&2
+            exit 1
+          fi
+          if [[ "$PUBLISH_RELEASE" == "true" ]]; then
+            TAG_REFS="$(gh api --paginate "repos/$GH_REPO/git/matching-refs/tags/v" --jq '.[].ref')"
+            python3 - "$VERSION" "$TAG_REFS" <<'PY'
+          import re
+          import sys
+
+          selected = tuple(map(int, sys.argv[1].split(".")))
+          published = []
+          for ref in sys.argv[2].splitlines():
               match = re.fullmatch(r"refs/tags/v(\d+)\.(\d+)\.(\d+)", ref.strip())
               if match:
-                  versions.append(tuple(map(int, match.groups())))
-          latest = max(versions, default=(0, 1, 0))
-          requested = os.environ.get("RELEASE_VERSION_OVERRIDE", "").strip()
-          if requested:
-              match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", requested)
-              if not match:
-                  sys.exit("release_version must use MAJOR.MINOR.PATCH, such as 1.0.0")
-              selected = tuple(map(int, match.groups()))
-              if selected <= latest:
-                  sys.exit("release_version must be higher than the latest existing version tag")
-          else:
-              major, minor, patch = latest
-              selected = (major, minor, patch + 1)
-          print(".".join(map(str, selected)))
-          ')"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" Resources/Info.plist
-          echo "Packaging release version: $VERSION"
+                  published.append(tuple(map(int, match.groups())))
+          latest = max(published, default=(0, 0, 0))
+          if selected <= latest:
+              latest_text = ".".join(map(str, latest))
+              print(
+                  f"App version {sys.argv[1]} must be higher than latest release {latest_text}. "
+                  "Open and merge a version-bump PR before publishing.",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+          PY
+          fi
+          echo "Packaging app version: $VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - name: Build disk image and ZIP
         run: ./scripts/package.sh
@@ -135,7 +137,7 @@ jobs:
           COUNT="$(gh api "repos/$GH_REPO/git/matching-refs/tags/v$RELEASE_VERSION" \
             --jq "map(select(.ref == \"refs/tags/v$RELEASE_VERSION\")) | length")"
           if [[ "$COUNT" != "0" ]]; then
-            echo "Tag v$RELEASE_VERSION was created while this run was packaging. Rerun the workflow to select the next patch version." >&2
+            echo "Tag v$RELEASE_VERSION was created while this run was packaging. Merge a version-bump PR, then rerun the workflow from main." >&2
             exit 1
           fi
       - name: Download tested packages
