@@ -38,17 +38,23 @@ The script signs each executable with the hardened runtime, notarizes and staple
 the app, packages it, and notarizes and staples the DMG. Never commit a certificate,
 private key, app-specific password, or notarization credential to Git.
 
-## Publish deliberately
+## Publish from GitHub
 
-1. Confirm the macOS CI jobs pass on Apple Silicon.
-2. Check the version and build number in `Resources/Info.plist`.
-3. Verify the signed package on a Mac that has not built SkyEye before, including
-   drag-to-Applications installation, initial command approval, quitting, and updating.
-4. Create a GitHub prerelease with the notarized DMG, ZIP, and checksum file. Include
-   known limitations and macOS requirements in its release notes.
+1. Update `CFBundleShortVersionString` in `Resources/Info.plist` to a new version,
+   such as `0.1.1`. Increase `CFBundleVersion` too. Merge the change into `main`.
+2. Open **Actions → macOS CI → Run workflow**.
+3. Select the `main` branch and enable **Publish a release after tests and packaging**.
+4. Click **Run workflow**.
 
-The CI workflow uploads build artifacts for review; it does not change repository
-visibility, publish a release, or access signing credentials.
+The workflow runs the full tests, builds the Apple Silicon packages, verifies their
+checksums, and publishes a developer prerelease with the DMG, ZIP, and checksum file.
+The release tag, such as `v0.1.1`, comes from the app version. Release notes are
+created automatically. An existing release is not overwritten; use a new version.
+
+Ordinary pushes and manual runs with the release option disabled only produce CI
+artifacts. Pull requests run tests and build the app without packaging or publishing.
+Releases can only run from `main`. The workflow uses GitHub's built-in token; no
+personal access token or Apple credentials are needed for this preview release.
 
 SkyEye does not currently have an automatic updater. Users update by quitting SkyEye,
 downloading a newer app, and replacing it in Applications. Their configuration and
