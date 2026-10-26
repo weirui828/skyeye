@@ -40,16 +40,19 @@ private key, app-specific password, or notarization credential to Git.
 
 ## Publish from GitHub
 
-1. Update `CFBundleShortVersionString` in `Resources/Info.plist` to a new version,
-   such as `0.1.1`. Increase `CFBundleVersion` too. Merge the change into `main`.
-2. Open **Actions → macOS CI → Run workflow**.
-3. Select the `main` branch and enable **Publish a release after tests and packaging**.
+1. Open **Actions → macOS CI → Run workflow**.
+2. Select the `main` branch and enable **Publish a release after tests and packaging**.
+3. Optionally enter a version such as `0.2.1` or `1.0.0`. It must be higher
+   than all existing version tags. Leave it blank to increment the latest patch.
 4. Click **Run workflow**.
 
 The workflow runs the full tests, builds the Apple Silicon packages, verifies their
 checksums, and publishes a developer prerelease with the DMG, ZIP, and checksum file.
-The release tag, such as `v0.1.1`, comes from the app version. Release notes are
-created automatically. An existing release is not overwritten; use a new version.
+The workflow reads existing `vMAJOR.MINOR.PATCH` tags and uses the selected version,
+or increments the highest patch version when none was entered. The chosen version
+is written into the packaged app and release tag. The source plist remains the
+version used for local builds. Release notes are created automatically. If another
+run creates the same tag while packaging is in progress, rerun the workflow.
 
 Ordinary pushes and manual runs with the release option disabled only produce CI
 artifacts. Pull requests run tests and build the app without packaging or publishing.
