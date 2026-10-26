@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/weirui828/skyeye/compare/v0.1.2...v0.1.3) (2026-10-26)
+
+
+### Bug Fixes
+
+* make canvas dragging and connections reliable ([#16](https://github.com/weirui828/skyeye/issues/16)) ([75f004d](https://github.com/weirui828/skyeye/commit/75f004dbd6fb92d6d5fe0461c59ab0fa705208c7))
+
 ## [0.1.2](https://github.com/weirui828/skyeye/compare/v0.1.1...v0.1.2) (2026-10-26)
 
 
