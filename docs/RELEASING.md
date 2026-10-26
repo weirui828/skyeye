@@ -12,8 +12,9 @@ python3 -m unittest discover -s scripts/tests -v
 ./scripts/package.sh
 ```
 
-The package script builds a universal app for Apple Silicon and Intel Macs, verifies
+The package script builds an arm64 app for Apple Silicon Macs, verifies
 the signatures, and writes a DMG, app ZIP, and SHA-256 checksums under `build/`.
+Intel Macs are not supported.
 The DMG includes an Applications shortcut for drag-and-drop installation. No service
 definitions, logs, local settings, or development files are copied into the app.
 
@@ -39,7 +40,7 @@ private key, app-specific password, or notarization credential to Git.
 
 ## Publish deliberately
 
-1. Confirm the macOS CI jobs pass on Apple Silicon and Intel.
+1. Confirm the macOS CI jobs pass on Apple Silicon.
 2. Check the version and build number in `Resources/Info.plist`.
 3. Verify the signed package on a Mac that has not built SkyEye before, including
    drag-to-Applications installation, initial command approval, quitting, and updating.

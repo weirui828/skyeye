@@ -4,10 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 CONFIG="${CONFIG:-release}"
-BUILD_ARGS=(-c "$CONFIG" --disable-sandbox)
-if [[ "${UNIVERSAL:-0}" == "1" ]]; then
-    BUILD_ARGS+=(--arch arm64 --arch x86_64)
-fi
+BUILD_ARGS=(-c "$CONFIG" --disable-sandbox --arch arm64)
 # --disable-sandbox: SwiftPM's own manifest sandbox cannot nest inside a
 # workspace sandbox (the DSH/CI build sandbox denies sandbox-exec).
 swift build "${BUILD_ARGS[@]}"

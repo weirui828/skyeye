@@ -12,7 +12,7 @@ Check the CI results before you use a new build.
 ## Requirements
 
 - macOS 14 or later.
-- An Apple Silicon or Intel Mac.
+- An Apple Silicon Mac (M1 or later). Intel Macs are not supported.
 - Xcode 15.3 or later to build from source.
 
 A packaged app does not need Xcode.
@@ -291,9 +291,9 @@ python3 -m unittest discover -s scripts/tests -v
 ./scripts/package.sh
 ```
 
-The package script creates a universal app, a DMG, a ZIP, and SHA-256 checksums.
+The package script creates an Apple Silicon app, a DMG, a ZIP, and SHA-256 checksums.
 Generated files stay under `build/`. Git ignores this directory.
-The CI workflow tests Apple Silicon and Intel builds.
+The CI workflow tests the Apple Silicon build.
 It creates developer packages only after the tests pass.
 
 See [Preparing a Mac release](docs/RELEASING.md) for signing and notarization instructions.

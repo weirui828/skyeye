@@ -33,14 +33,13 @@ Do not rewrite public history for routine changes.
 
 ### Require CI after it passes
 
-Confirm both hosted test jobs pass before you make the checks mandatory.
+Confirm the hosted Apple Silicon test job passes before you make the checks mandatory.
 Investigate any failures before you merge a change.
 Do not remove the tests only to obtain a successful result.
 
-After the failures are fixed, require these checks:
+After the failures are fixed, require this check:
 
 - `Test (macos-15)`
-- `Test (macos-15-intel)`
 
 Select GitHub Actions as the expected source of the checks.
 Decide whether to apply the rules to the repository administrator too.
