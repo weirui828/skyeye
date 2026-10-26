@@ -34,6 +34,11 @@ jobs:
           persist-credentials: false
       - name: Swift version
         run: swift --version
+      - name: Set up Python for HTTP test services
+        id: python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
       - name: Shell syntax
         run: |
           for script in scripts/build.sh scripts/install.sh scripts/package.sh; do
@@ -44,6 +49,7 @@ jobs:
       - name: Core tests
         env:
           TEST_FILTER: ${{ inputs.test_filter }}
+          SKYEYE_TEST_PYTHON: ${{ steps.python.outputs.python-path }}
         run: |
           if [[ -n "$TEST_FILTER" ]]; then
             swift test --disable-sandbox --filter "$TEST_FILTER"

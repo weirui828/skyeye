@@ -100,6 +100,12 @@ final class ProcessTests: XCTestCase {
 
 @MainActor
 final class ManagerTests: XCTestCase {
+    private func httpServerCommand(port: Int) -> String {
+        let python = ProcessInfo.processInfo.environment["SKYEYE_TEST_PYTHON"] ?? "python3"
+        let quoted = "'" + python.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        return "exec " + quoted + " -u -m http.server \(port) --bind 127.0.0.1"
+    }
+
     private func makeManager() throws -> (ServiceManager, URL) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("skyeye-test-\(UUID())")
         let manager = ServiceManager(paths: SkyEyePaths(root: root, logsDir: root.appendingPathComponent("logs")))
@@ -120,7 +126,18 @@ final class ManagerTests: XCTestCase {
         let snapshot = try manager.snapshot(named: name)
         let listening = snapshot.service.port.map { PortProbe.isListening($0) }
         let log = LogTail.read(manager.paths.logFile(for: name), lines: 30)
-        XCTFail("'\(name)' never became \(state); snapshot=\(snapshot.state), detail=\(snapshot.detail ?? "none"), listening=\(String(describing: listening)), pid=\(String(describing: snapshot.pid))\n\(log)")
+        var processInfo = ""
+        if let pid = snapshot.pid {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/ps")
+            process.arguments = ["-ww", "-o", "pid,ppid,pgid,state,command", "-p", String(pid)]
+            let output = Pipe()
+            process.standardOutput = output
+            try process.run()
+            processInfo = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            process.waitUntilExit()
+        }
+        XCTFail("'\(name)' never became \(state); snapshot=\(snapshot.state), detail=\(snapshot.detail ?? "none"), listening=\(String(describing: listening)), pid=\(String(describing: snapshot.pid))\n\(processInfo)\n\(log)")
     }
 
     func testSelectedAutoStartIncludesDependenciesAndPreservesSelection() throws {
@@ -222,7 +239,7 @@ final class ManagerTests: XCTestCase {
         let (fd, port) = try listenOnFreePort()
         close(fd)
         try manager.addService(ServiceConfig(name: "db", port: port,
-            command: "sleep 1; exec python3 -m http.server \(port) --bind 127.0.0.1", healthPath: "/"), trusted: true)
+            command: "sleep 1; " + httpServerCommand(port: port), healthPath: "/"), trusted: true)
         try manager.addService(ServiceConfig(name: "api", command: "exec sleep 60", dependencies: ["db"]), trusted: true)
         try manager.addService(ServiceConfig(name: "web", command: "exec sleep 60", dependencies: ["api"]), trusted: true)
         try manager.addService(ServiceConfig(name: "worker", command: "exec sleep 60", dependencies: ["db"]), trusted: true)
@@ -303,7 +320,7 @@ final class ManagerTests: XCTestCase {
         let (fd, port) = try listenOnFreePort()
         close(fd)
         try manager.addService(ServiceConfig(name: "db", port: port,
-            command: "exec python3 -m http.server \(port) --bind 127.0.0.1"), trusted: true)
+            command: httpServerCommand(port: port)), trusted: true)
         try manager.addService(ServiceConfig(name: "web", command: "exit 5", autoRestart: true, dependencies: ["db"]), trusted: true)
         manager.startMonitoring(interval: 0.1)
         try manager.start(named: "web")
@@ -354,7 +371,7 @@ final class ManagerTests: XCTestCase {
         close(fd)
 
         try manager.addService(
-            ServiceConfig(name: "web", port: port, command: "exec python3 -m http.server \(port) --bind 127.0.0.1", directory: "/tmp", healthPath: "/"),
+            ServiceConfig(name: "web", port: port, command: httpServerCommand(port: port), directory: "/tmp", healthPath: "/"),
             trusted: true
         )
         try manager.start(named: "web")
@@ -373,7 +390,7 @@ final class ManagerTests: XCTestCase {
         close(fd)
 
         try manager.addService(
-            ServiceConfig(name: "web", port: port, command: "exec python3 -m http.server \(port) --bind 127.0.0.1", directory: "/tmp"),
+            ServiceConfig(name: "web", port: port, command: httpServerCommand(port: port), directory: "/tmp"),
             trusted: true
         )
         try manager.start(named: "web")
@@ -461,7 +478,7 @@ final class ManagerTests: XCTestCase {
         let (fd, port) = try listenOnFreePort()
         close(fd)
 
-        let command = "exec python3 -m http.server " + String(port) + " --bind 127.0.0.1"
+        let command = httpServerCommand(port: port)
         try manager.addService(ServiceConfig(name: "web", port: port, command: command, directory: "/tmp"), trusted: true)
         try manager.start(named: "web")
         try await waitFor(manager, "web", .running)
