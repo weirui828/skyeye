@@ -7,9 +7,13 @@ on:
   workflow_dispatch:
     inputs:
       publish_release:
-        description: Publish a release after tests and packaging (main only; version from Info.plist)
+        description: Publish a release after tests and packaging (main only; version can be automatic or specified)
         type: boolean
         default: false
+        required: false
+      release_version:
+        description: Optional explicit version (for example, 0.2.1 or 1.0.0); must be higher than existing tags
+        type: string
         required: false
 
 permissions:
@@ -64,18 +68,40 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: macos-15
     timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_VERSION_OVERRIDE: ${{ inputs.release_version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - name: Read app version
+      - name: Set next release version
         id: version
         run: |
-          VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Expected a numeric major.minor.patch app version." >&2
-            exit 1
-          fi
+          VERSION="$(gh api --paginate "repos/$GH_REPO/git/matching-refs/tags/v" --jq '.[].ref' | python3 -c '
+          import os, re, sys
+          versions = []
+          for ref in sys.stdin:
+              match = re.fullmatch(r"refs/tags/v(\d+)\.(\d+)\.(\d+)", ref.strip())
+              if match:
+                  versions.append(tuple(map(int, match.groups())))
+          latest = max(versions, default=(0, 1, 0))
+          requested = os.environ.get("RELEASE_VERSION_OVERRIDE", "").strip()
+          if requested:
+              match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", requested)
+              if not match:
+                  sys.exit("release_version must use MAJOR.MINOR.PATCH, such as 1.0.0")
+              selected = tuple(map(int, match.groups()))
+              if selected <= latest:
+                  sys.exit("release_version must be higher than the latest existing version tag")
+          else:
+              major, minor, patch = latest
+              selected = (major, minor, patch + 1)
+          print(".".join(map(str, selected)))
+          ')"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" Resources/Info.plist
+          echo "Packaging release version: $VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - name: Build disk image and ZIP
         run: ./scripts/package.sh
@@ -109,7 +135,7 @@ jobs:
           COUNT="$(gh api "repos/$GH_REPO/git/matching-refs/tags/v$RELEASE_VERSION" \
             --jq "map(select(.ref == \"refs/tags/v$RELEASE_VERSION\")) | length")"
           if [[ "$COUNT" != "0" ]]; then
-            echo "Tag v$RELEASE_VERSION already exists. Update the app version before releasing." >&2
+            echo "Tag v$RELEASE_VERSION was created while this run was packaging. Rerun the workflow to select the next patch version." >&2
             exit 1
           fi
       - name: Download tested packages
