@@ -1,0 +1,21 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/v17.3.0/schemas/config.json",
+  "packages": {
+    ".": {
+      "release-type": "simple",
+      "package-name": "SkyEye",
+      "include-component-in-tag": false,
+      "include-v-in-tag": true,
+      "draft": true,
+      "force-tag-creation": true,
+      "prerelease": true,
+      "extra-files": [
+        {
+          "type": "xml",
+          "path": "Resources/Info.plist",
+          "xpath": "/plist/dict/key[text()='CFBundleShortVersionString']/following-sibling::string[1]"
+        }
+      ]
+    }
+  }
+}

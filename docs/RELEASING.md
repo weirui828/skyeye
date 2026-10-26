@@ -40,27 +40,55 @@ private key, app-specific password, or notarization credential to Git.
 
 ## Publish from GitHub
 
-1. Open a version-bump PR that updates `CFBundleShortVersionString` in
-   `Resources/Info.plist` to the intended version, such as `0.1.1`, `0.2.1`, or
-   `1.0.0`. The version must be higher than the latest `vMAJOR.MINOR.PATCH` tag.
-2. Merge the PR after CI passes.
-3. Open **Actions → macOS CI → Run workflow**, select `main`, and enable
-   **Publish a release after tests and packaging**.
-4. Click **Run workflow**.
+[Release Please](https://github.com/googleapis/release-please) maintains the release
+PR, version files, changelog, and GitHub tag. The pinned action is configured in
+`.github/workflows/release-please.yml` and `release-please-config.json`.
 
-The workflow runs the full tests, builds the Apple Silicon packages, verifies their
-checksums, and publishes a developer prerelease with the DMG, ZIP, and checksum file.
-`CFBundleShortVersionString` in the merged plist is the single source for the
-packaged app version and GitHub release tag. Before packaging a release, the
-workflow checks that it is higher than every existing version tag. If it is not,
-the workflow stops before packaging and asks for a version-bump PR. Release notes
-are created automatically. If another run creates the same tag while packaging is
-in progress, merge a version-bump PR and rerun from `main`.
+Before the first run, enable **Settings → Actions → General → Workflow permissions →
+Allow GitHub Actions to create and approve pull requests**. The workflow uses the
+built-in `GITHUB_TOKEN`; it does not approve or merge its own PRs.
 
-Ordinary pushes and manual runs with the release option disabled only produce CI
-artifacts. Pull requests run tests and build the app without packaging or publishing.
-Releases can only run from `main`. The workflow uses GitHub's built-in token; no
-personal access token or Apple credentials are needed for this preview release.
+1. Use Conventional Commit titles when squash-merging changes: `fix:` for a patch,
+   `feat:` for a minor version, and `fix!:` or `feat!:` for a breaking major release.
+2. After changes land on `main`, Release Please creates or updates its release PR.
+   That PR updates `version.txt`, `.release-please-manifest.json`, the app's
+   `CFBundleShortVersionString`, and `CHANGELOG.md` together. CI rejects any
+   mismatch between the version files and plist.
+3. Review the version, changelog, and CI results, then merge the release PR.
+   If GitHub asks you to approve workflows on the bot-created PR, approve them.
+   If checks were not started, run **Actions → macOS CI → Run workflow** on the
+   release PR's branch before merging.
+4. Release Please creates the version tag and a draft GitHub release. The workflow
+   reuses macOS CI to test and package the exact release commit, checks the app
+   version against the tag, verifies checksums, uploads the DMG and ZIP, and only
+   then publishes the developer prerelease.
+
+The tag and draft are created before packaging; downloads remain unpublished if a
+check or package fails. Use **Re-run failed jobs** on that Release Please run after
+fixing the failure. This retains the successful release job's outputs and retries
+packaging or uploading without allocating another version. Uploads replace assets
+of the same name so they can be retried safely.
+
+Ordinary CI runs produce developer preview artifacts without publishing releases.
+Release Please runs on `main` pushes and can also be retried with **Actions →
+Release Please → Run workflow**. Do not create release tags or bump version files
+separately from the release PR.
+
+### Choose a specific version
+
+To request `0.2.1` or `1.0.0`, put a `Release-As` footer in the body of a commit
+merged into `main`, for example:
+
+```text
+chore: prepare first stable release
+
+Release-As: 1.0.0
+```
+
+Preserve that footer in the final squash commit message. Release Please proposes
+that version in its release PR; review and merge the PR as usual. This is the
+[documented version override](https://github.com/googleapis/release-please#how-do-i-change-the-version-number),
+so no separate version input or custom increment script is needed.
 
 SkyEye does not currently have an automatic updater. Users update by quitting SkyEye,
 downloading a newer app, and replacing it in Applications. Their configuration and

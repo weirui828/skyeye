@@ -1,0 +1,81 @@
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Prepare release PR or draft release
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      created: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+      sha: ${{ steps.release.outputs.sha }}
+    steps:
+      - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
+        id: release
+        with:
+          target-branch: main
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  package:
+    name: Test and package release commit
+    needs: release
+    if: needs.release.outputs.created == 'true'
+    uses: ./.github/workflows/ci.yml
+    with:
+      checkout_ref: ${{ needs.release.outputs.sha }}
+      artifact_name: SkyEye-${{ needs.release.outputs.version }}-arm64
+
+  publish:
+    name: Attach packages and publish developer preview
+    needs: [release, package]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ needs.release.outputs.tag }}
+      RELEASE_VERSION: ${{ needs.release.outputs.version }}
+      APP_VERSION: ${{ needs.package.outputs.version }}
+    steps:
+      - name: Verify app version matches release
+        run: |
+          if [[ "$APP_VERSION" != "$RELEASE_VERSION" || "$RELEASE_TAG" != "v$APP_VERSION" ]]; then
+            echo "The packaged app version must match the release tag." >&2
+            exit 1
+          fi
+      - name: Download tested packages
+        run: gh run download "$GITHUB_RUN_ID" --name "SkyEye-$RELEASE_VERSION-arm64" --dir build
+      - name: Verify checksums
+        working-directory: build
+        run: sha256sum -c "SkyEye-$RELEASE_VERSION-arm64-SHA256SUMS.txt"
+      - name: Attach packages
+        run: |
+          gh release upload "$RELEASE_TAG" \
+            "build/SkyEye-$RELEASE_VERSION-arm64.dmg" \
+            "build/SkyEye-$RELEASE_VERSION-arm64.zip" \
+            "build/SkyEye-$RELEASE_VERSION-arm64-SHA256SUMS.txt" \
+            --clobber
+      - name: Publish developer preview
+        run: gh release edit "$RELEASE_TAG" --draft=false --prerelease

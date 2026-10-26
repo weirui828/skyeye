@@ -5,19 +5,26 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:
     inputs:
-      publish_release:
-        description: Publish a release after tests and packaging (main only; first merge a version bump PR)
-        type: boolean
-        default: false
-        required: false
+      checkout_ref:
+        description: Exact commit to test and package for a release
+        type: string
+        required: true
+      artifact_name:
+        type: string
+        required: true
+    outputs:
+      version:
+        description: Version embedded in the packaged app
+        value: ${{ jobs.package.outputs.version }}
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}-${{ github.event_name }}
-  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+  group: ci-${{ github.ref }}-${{ github.event_name }}-${{ inputs.artifact_name || 'preview' }}
+  cancel-in-progress: ${{ inputs.checkout_ref == '' && github.event_name != 'workflow_dispatch' }}
 
 jobs:
   test:
@@ -27,14 +34,22 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
           persist-credentials: false
-      - name: Validate release branch
-        if: github.event_name == 'workflow_dispatch' && inputs.publish_release
+      - name: Verify app and release versions match
         run: |
-          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
-            echo "Releases must run from main." >&2
-            exit 1
-          fi
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          import plistlib
+
+          version = Path("version.txt").read_text().strip()
+          manifest = json.loads(Path(".release-please-manifest.json").read_text())["."]
+          with open("Resources/Info.plist", "rb") as file:
+              app = plistlib.load(file)["CFBundleShortVersionString"]
+          if not version == manifest == app:
+              raise SystemExit(f"Version mismatch: version.txt={version}, manifest={manifest}, app={app}")
+          PY
       - name: Swift version
         run: swift --version
       - name: Set up Python for HTTP test services
@@ -64,95 +79,26 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: macos-15
     timeout-minutes: 20
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-      PUBLISH_RELEASE: ${{ inputs.publish_release }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
           persist-credentials: false
-      - name: Read and validate app version
-        id: version
-        run: |
-          VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "CFBundleShortVersionString must use MAJOR.MINOR.PATCH." >&2
-            exit 1
-          fi
-          if [[ "$PUBLISH_RELEASE" == "true" ]]; then
-            TAG_REFS="$(gh api --paginate "repos/$GH_REPO/git/matching-refs/tags/v" --jq '.[].ref')"
-            python3 - "$VERSION" "$TAG_REFS" <<'PY'
-          import re
-          import sys
-
-          selected = tuple(map(int, sys.argv[1].split(".")))
-          published = []
-          for ref in sys.argv[2].splitlines():
-              match = re.fullmatch(r"refs/tags/v(\d+)\.(\d+)\.(\d+)", ref.strip())
-              if match:
-                  published.append(tuple(map(int, match.groups())))
-          latest = max(published, default=(0, 0, 0))
-          if selected <= latest:
-              latest_text = ".".join(map(str, latest))
-              print(
-                  f"App version {sys.argv[1]} must be higher than latest release {latest_text}. "
-                  "Open and merge a version-bump PR before publishing.",
-                  file=sys.stderr,
-              )
-              sys.exit(1)
-          PY
-          fi
-          echo "Packaging app version: $VERSION"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - name: Build disk image and ZIP
         run: ./scripts/package.sh
+      - name: Read packaged app version
+        id: version
+        run: |
+          VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' build/SkyEye.app/Contents/Info.plist)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - name: Upload developer preview packages
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: SkyEye-arm64-developer-preview
+          name: ${{ inputs.artifact_name || 'SkyEye-arm64-developer-preview' }}
           path: |
             build/SkyEye-*.dmg
             build/SkyEye-*.zip
             build/SkyEye-*-SHA256SUMS.txt
           if-no-files-found: error
+          overwrite: true
           retention-days: 14
-
-  release:
-    name: Publish release
-    needs: package
-    if: github.event_name == 'workflow_dispatch' && inputs.publish_release && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      actions: read
-      contents: write
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-      RELEASE_VERSION: ${{ needs.package.outputs.version }}
-    steps:
-      - name: Require a new release version
-        run: |
-          COUNT="$(gh api "repos/$GH_REPO/git/matching-refs/tags/v$RELEASE_VERSION" \
-            --jq "map(select(.ref == \"refs/tags/v$RELEASE_VERSION\")) | length")"
-          if [[ "$COUNT" != "0" ]]; then
-            echo "Tag v$RELEASE_VERSION was created while this run was packaging. Merge a version-bump PR, then rerun the workflow from main." >&2
-            exit 1
-          fi
-      - name: Download tested packages
-        run: gh run download "$GITHUB_RUN_ID" --name SkyEye-arm64-developer-preview --dir build
-      - name: Verify checksums
-        working-directory: build
-        run: sha256sum -c "SkyEye-$RELEASE_VERSION-arm64-SHA256SUMS.txt"
-      - name: Publish developer preview
-        run: |
-          gh release create "v$RELEASE_VERSION" \
-            "build/SkyEye-$RELEASE_VERSION-arm64.dmg" \
-            "build/SkyEye-$RELEASE_VERSION-arm64.zip" \
-            "build/SkyEye-$RELEASE_VERSION-arm64-SHA256SUMS.txt" \
-            --target "$GITHUB_SHA" \
-            --title "SkyEye v$RELEASE_VERSION — Developer Preview" \
-            --generate-notes \
-            --notes "Requires macOS 14 or later and an Apple Silicon Mac (M1 or later). Download the DMG and drag SkyEye.app into Applications. Intel Macs are not supported." \
-            --prerelease
