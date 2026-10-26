@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      test_filter:
+        description: Optional Swift test filter for diagnosis; leave empty for full validation
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -28,6 +34,11 @@ jobs:
           persist-credentials: false
       - name: Swift version
         run: swift --version
+      - name: Set up Python for HTTP test services
+        id: python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
       - name: Shell syntax
         run: |
           for script in scripts/build.sh scripts/install.sh scripts/package.sh; do
@@ -36,14 +47,22 @@ jobs:
       - name: Installer safety tests
         run: python3 -m unittest discover -s scripts/tests -v
       - name: Core tests
-        run: swift test --disable-sandbox
+        env:
+          TEST_FILTER: ${{ inputs.test_filter }}
+          SKYEYE_TEST_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          if [[ -n "$TEST_FILTER" ]]; then
+            swift test --disable-sandbox --filter "$TEST_FILTER"
+          else
+            swift test --disable-sandbox
+          fi
       - name: Build and verify app
         run: ./scripts/build.sh
 
   package:
     name: Package universal app
     needs: test
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.test_filter == '')
     runs-on: macos-15
     timeout-minutes: 20
     steps:

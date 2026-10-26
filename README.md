@@ -283,6 +283,8 @@ Do not attach configuration files or raw logs to public issues.
 
 ## Test and package
 
+The HTTP service tests need Python 3. CI provides Python 3.12.
+
 ```bash
 swift test --disable-sandbox
 python3 -m unittest discover -s scripts/tests -v
