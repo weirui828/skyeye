@@ -34,6 +34,11 @@ private struct NodePoint: Codable {
     var point: CGPoint { CGPoint(x: x, y: y) }
 }
 
+private struct ConnectionDrag {
+    var source: String
+    var location: CGPoint
+}
+
 struct DependencyWorkspace: View {
     @EnvironmentObject private var manager: ServiceManager
     @AppStorage("dependencyCanvasPositions") private var savedPositions = Data()
@@ -46,7 +51,7 @@ struct DependencyWorkspace: View {
     @State private var panOrigin: CGSize?
     @State private var dragOrigins: [String: CGPoint] = [:]
     @State private var connectionSource: String?
-    @State private var dropTarget: String?
+    @GestureState private var connectionDrag: ConnectionDrag?
     @State private var confirmStop: String?
     @State private var stopNames = Set<String>()
     private let cardWidth: CGFloat = 268
@@ -84,17 +89,14 @@ struct DependencyWorkspace: View {
                                          height: panOrigin!.height + value.translation.height)
                         }.onEnded { _ in panOrigin = nil })
                         .onTapGesture { connectionSource = nil }
-                    ZStack(alignment: .topLeading) {
-                        edges
-                            .allowsHitTesting(false)
-                        ForEach(manager.snapshots) { snapshot in
-                            node(snapshot)
-                                .position(center(of: snapshot.service.name))
-                        }
+                    edges
+                        .allowsHitTesting(false)
+                    ForEach(manager.snapshots) { snapshot in
+                        node(snapshot)
+                            .scaleEffect(zoom)
+                            .frame(width: cardWidth * zoom, height: cardHeight * zoom)
+                            .position(viewportPoint(center(of: snapshot.service.name)))
                     }
-                    .frame(width: graphSize.width, height: graphSize.height, alignment: .topLeading)
-                    .scaleEffect(zoom, anchor: .topLeading)
-                    .offset(pan)
                     if manager.snapshots.isEmpty {
                         ContentUnavailableView {
                             Label("No services yet", systemImage: "square.stack.3d.up")
@@ -108,6 +110,7 @@ struct DependencyWorkspace: View {
                 }
                 // Pin overlays to the viewport, even when the graph extends beyond it.
                 .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
+                .coordinateSpace(name: "dependencyViewport")
                 .clipped()
                 .overlay(alignment: .bottomLeading) {
                     HStack(spacing: 6) {
@@ -237,21 +240,18 @@ struct DependencyWorkspace: View {
                     .menuStyle(.borderlessButton).fixedSize()
                     .help("Dependencies; choose one to remove its link")
                 }
-                Button {
-                    if let source = connectionSource {
-                        connect(source, to: snapshot.service.name)
-                    } else {
-                        connectionSource = snapshot.service.name
-                    }
-                } label: {
-                    Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
-                        .frame(width: 24, height: 24)
-                }
-                .buttonStyle(.borderless)
-                .onDrag {
-                    connectionSource = snapshot.service.name
-                    return NSItemProvider(object: snapshot.service.name as NSString)
-                }
+                Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+                    .highPriorityGesture(
+                        connectionGesture(from: snapshot.service.name)
+                            .exclusively(before: TapGesture().onEnded {
+                                selectConnector(snapshot.service.name)
+                            })
+                    )
+                    .accessibilityLabel("Connect " + snapshot.service.name)
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction { selectConnector(snapshot.service.name) }
                 .help(connectionSource.map { "\(snapshot.service.name) depends on \($0)" }
                       ?? "Drag onto a service that depends on \(snapshot.service.name), or click to connect")
             }
@@ -260,12 +260,12 @@ struct DependencyWorkspace: View {
             .background {
                 Color.clear
                     .contentShape(Rectangle())
-                    .gesture(DragGesture().onChanged { value in
+                    .gesture(DragGesture(coordinateSpace: .named("dependencyViewport")).onChanged { value in
                         let name = snapshot.service.name
                         if dragOrigins[name] == nil { dragOrigins[name] = positions[name]?.point ?? .zero }
                         let origin = dragOrigins[name]!
-                        positions[name] = NodePoint(x: max(0, origin.x + value.translation.width / zoom),
-                                                    y: max(0, origin.y + value.translation.height / zoom))
+                        positions[name] = NodePoint(x: origin.x + value.translation.width / zoom,
+                                                    y: origin.y + value.translation.height / zoom)
                     }.onEnded { _ in dragOrigins[snapshot.service.name] = nil; persistPositions() })
             }
             ServiceCard(snapshot: snapshot, route: $route, onError: { error = $0 },
@@ -275,19 +275,50 @@ struct DependencyWorkspace: View {
         .frame(width: cardWidth, height: cardHeight, alignment: .top)
         .background(SkyEyeSurface.group, in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(
-            connectionSource == snapshot.service.name || dropTarget == snapshot.service.name ? Color.accentColor : Color.primary.opacity(0.08),
-            lineWidth: connectionSource == snapshot.service.name || dropTarget == snapshot.service.name ? 2 : 1))
+            (connectionDrag?.source ?? connectionSource) == snapshot.service.name || connectionTarget == snapshot.service.name ? Color.accentColor : Color.primary.opacity(0.08),
+            lineWidth: (connectionDrag?.source ?? connectionSource) == snapshot.service.name || connectionTarget == snapshot.service.name ? 2 : 1))
         .contentShape(RoundedRectangle(cornerRadius: 14))
         .onTapGesture {
-            if let source = connectionSource { connect(source, to: snapshot.service.name) }
+            if let source = connectionSource, source != snapshot.service.name {
+                connect(source, to: snapshot.service.name)
+            }
         }
-        .dropDestination(for: String.self) { names, _ in
-            guard let source = names.first, manager.service(named: source) != nil else { return false }
-            return connect(source, to: snapshot.service.name)
-        } isTargeted: { targeted in
-            if targeted { dropTarget = snapshot.service.name }
-            else if dropTarget == snapshot.service.name { dropTarget = nil }
+    }
+
+    private func selectConnector(_ name: String) {
+        if let source = connectionSource {
+            if source == name { connectionSource = nil }
+            else { connect(source, to: name) }
+        } else {
+            connectionSource = name
         }
+    }
+
+    private var connectionTarget: String? {
+        guard let drag = connectionDrag else { return nil }
+        return connectionTarget(at: drag.location, excluding: drag.source)
+    }
+
+    private func connectionTarget(at point: CGPoint, excluding source: String) -> String? {
+        // Use graph coordinates so hit testing follows the same zoom and pan as the cards.
+        manager.snapshots.reversed().first { snapshot in
+            guard snapshot.service.name != source,
+                  let origin = positions[snapshot.service.name]?.point else { return false }
+            return CGRect(origin: origin, size: CGSize(width: cardWidth, height: cardHeight)).contains(point)
+        }?.service.name
+    }
+
+    private func connectionGesture(from source: String) -> some Gesture {
+        DragGesture(minimumDistance: 4, coordinateSpace: .named("dependencyViewport"))
+            .updating($connectionDrag) { value, state, _ in
+                state = ConnectionDrag(source: source, location: graphPoint(value.location))
+            }
+            .onEnded { value in
+                connectionSource = nil
+                if let target = connectionTarget(at: graphPoint(value.location), excluding: source) {
+                    connect(source, to: target)
+                }
+            }
     }
 
     private var groups: [String] { Array(Set(manager.config.services.compactMap(\.group))).sorted() }
@@ -309,9 +340,18 @@ struct DependencyWorkspace: View {
         }
     }
 
-    private var graphSize: CGSize {
-        CGSize(width: max(1000, (positions.values.map(\.x).max() ?? 0) + cardWidth + 80),
-               height: max(700, (positions.values.map(\.y).max() ?? 0) + cardHeight + 80))
+    private var graphBounds: CGRect {
+        positions.values.reduce(CGRect.null) { bounds, point in
+            bounds.union(CGRect(origin: point.point, size: CGSize(width: cardWidth, height: cardHeight)))
+        }
+    }
+
+    private func viewportPoint(_ point: CGPoint) -> CGPoint {
+        CGPoint(x: point.x * zoom + pan.width, y: point.y * zoom + pan.height)
+    }
+
+    private func graphPoint(_ point: CGPoint) -> CGPoint {
+        CGPoint(x: (point.x - pan.width) / zoom, y: (point.y - pan.height) / zoom)
     }
 
     private func center(of name: String) -> CGPoint {
@@ -321,6 +361,8 @@ struct DependencyWorkspace: View {
 
     private var edges: some View {
         Canvas { context, _ in
+            context.translateBy(x: pan.width, y: pan.height)
+            context.scaleBy(x: zoom, y: zoom)
             for service in manager.config.services {
                 for dependency in service.dependencies {
                     let from = center(of: dependency)
@@ -339,6 +381,16 @@ struct DependencyWorkspace: View {
                     arrow.addLine(to: CGPoint(x: end.x + 4, y: end.y + 8))
                     context.stroke(arrow, with: .color(.secondary), lineWidth: 1.7)
                 }
+            }
+            if let drag = connectionDrag {
+                let origin = positions[drag.source]?.point ?? .zero
+                let start = CGPoint(x: origin.x + cardWidth - 26, y: origin.y + 20)
+                var preview = Path()
+                preview.move(to: start)
+                preview.addLine(to: drag.location)
+                context.stroke(preview, with: .color(.accentColor), style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+                let marker = CGRect(x: drag.location.x - 4, y: drag.location.y - 4, width: 8, height: 8)
+                context.fill(Path(ellipseIn: marker), with: .color(.accentColor))
             }
         }
         .accessibilityLabel("Dependencies sit below their dependents; arrows point upward. Each service lists its prerequisites in its dependency menu.")
@@ -377,10 +429,11 @@ struct DependencyWorkspace: View {
     }
 
     private func fit(in viewport: CGSize) {
-        let width = (positions.values.map(\.x).max() ?? 0) + cardWidth
-        let height = (positions.values.map(\.y).max() ?? 0) + cardHeight
-        zoom = min(1.2, max(0.1, min((viewport.width - 96) / width, (viewport.height - 96) / height)))
-        pan = CGSize(width: (viewport.width - width * zoom) / 2, height: (viewport.height - height * zoom) / 2)
+        let bounds = graphBounds.isNull
+            ? CGRect(x: 0, y: 0, width: cardWidth, height: cardHeight) : graphBounds
+        zoom = min(1.2, max(0.1, min((viewport.width - 96) / bounds.width, (viewport.height - 96) / bounds.height)))
+        pan = CGSize(width: viewport.width / 2 - bounds.midX * zoom,
+                     height: viewport.height / 2 - bounds.midY * zoom)
     }
 
     @discardableResult private func connect(_ dependency: String, to name: String) -> Bool {
