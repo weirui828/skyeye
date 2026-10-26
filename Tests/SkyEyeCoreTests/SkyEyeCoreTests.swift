@@ -117,7 +117,10 @@ final class ManagerTests: XCTestCase {
             if try manager.snapshot(named: name).state == state { return }
             try await Task.sleep(nanoseconds: 200_000_000)
         }
-        XCTFail("'\(name)' never became \(state); is \(try manager.snapshot(named: name).state)")
+        let snapshot = try manager.snapshot(named: name)
+        let listening = snapshot.service.port.map { PortProbe.isListening($0) }
+        let log = LogTail.read(manager.paths.logFile(for: name), lines: 30)
+        XCTFail("'\(name)' never became \(state); snapshot=\(snapshot.state), detail=\(snapshot.detail ?? "none"), listening=\(String(describing: listening)), pid=\(String(describing: snapshot.pid))\n\(log)")
     }
 
     func testSelectedAutoStartIncludesDependenciesAndPreservesSelection() throws {
