@@ -31,7 +31,7 @@ Point at a service card to find its start, stop, restart, URL, logs, and edit bu
 
 Requires **macOS 14 or later and an Apple Silicon Mac**. No Xcode needed.
 
-1. **[Download SkyEye from Releases](https://github.com/weirui828/skyeye/releases)** — choose the `.dmg` file from the newest release.
+1. **[Download SkyEye v0.1.3](https://github.com/weirui828/skyeye/releases/tag/v0.1.3)** — choose the `.dmg` file under **Assets**.
 2. Open the DMG and drag **SkyEye.app** into **Applications**.
 3. Open SkyEye from Applications.
 
