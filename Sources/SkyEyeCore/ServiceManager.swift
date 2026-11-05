@@ -727,7 +727,9 @@ public final class ServiceManager: ObservableObject {
     }
 
     public func refresh() {
-        let fresh = config.services.map(makeSnapshot)
+        let fresh = config.services.map(makeSnapshot).sorted {
+            $0.service.name.localizedStandardCompare($1.service.name) == .orderedAscending
+        }
         if fresh != snapshots { snapshots = fresh }
     }
 

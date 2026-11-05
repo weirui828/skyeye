@@ -131,7 +131,9 @@ struct SettingsView: View {
             }
             .pickerStyle(.menu)
             if manager.config.settings.autoStartMode == .selected {
-                let services = manager.config.services.filter { $0.command != nil }
+                let services = manager.config.services.filter { $0.command != nil }.sorted {
+                    $0.name.localizedStandardCompare($1.name) == .orderedAscending
+                }
                 if services.isEmpty {
                     Text("Add a service with a start command to choose it here.")
                         .font(.caption).foregroundStyle(.secondary)
