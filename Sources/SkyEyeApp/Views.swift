@@ -281,11 +281,13 @@ struct ServiceListView: View {
         var id: String { group.map { "g:" + $0 } ?? "ungrouped" }
     }
 
-    /// Groups in the order they first appear in the config, so the user's order is respected.
+    /// Show ungrouped services first, then groups alphabetically.
     private var sections: [Section] {
         let regular = manager.snapshots.filter { $0.state != .pendingApproval }
-        var order: [String?] = []
-        for s in regular where !order.contains(s.service.group) { order.append(s.service.group) }
+        let groups = Set(regular.compactMap { $0.service.group }).sorted {
+            $0.localizedStandardCompare($1) == .orderedAscending
+        }
+        let order: [String?] = (regular.contains { $0.service.group == nil } ? [nil] : []) + groups.map(Optional.some)
         return order.map { g in Section(group: g, items: regular.filter { $0.service.group == g }) }
     }
 

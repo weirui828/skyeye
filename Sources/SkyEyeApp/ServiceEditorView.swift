@@ -228,7 +228,9 @@ struct ServiceEditorView: View {
     private var dependencySection: some View {
         VStack(alignment: .leading, spacing: 6) {
             SectionTitle(text: "Depends on")
-            let candidates = manager.config.services.filter { $0.name != original?.name }
+            let candidates = manager.config.services.filter { $0.name != original?.name }.sorted {
+                $0.name.localizedStandardCompare($1.name) == .orderedAscending
+            }
             if candidates.isEmpty {
                 Text("Add another service to define dependencies.")
                     .font(.caption).foregroundStyle(.secondary)
