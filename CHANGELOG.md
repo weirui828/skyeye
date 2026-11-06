@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/weirui828/skyeye/compare/v1.0.0...v1.0.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* sort services and groups alphabetically ([cf38599](https://github.com/weirui828/skyeye/commit/cf38599bdfc222d7dbe21dc4f01e13d74d1709f4))
+
 ## [1.0.0](https://github.com/weirui828/skyeye/compare/v0.1.3...v1.0.0) (2026-11-06)
 
 
