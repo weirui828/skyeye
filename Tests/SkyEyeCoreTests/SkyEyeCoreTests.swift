@@ -512,6 +512,18 @@ final class ManagerTests: XCTestCase {
         try manager.approve(named: "web")
         XCTAssertTrue(try manager.snapshot(named: "web").approved)
     }
+
+    func testSnapshotsAreSortedAlphabetically() throws {
+        let (manager, root) = try makeManager()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        _ = try manager.addService(ServiceConfig(name: "zebra", port: 3001), trusted: true)
+        _ = try manager.addService(ServiceConfig(name: "alpha", port: 3002), trusted: true)
+        _ = try manager.addService(ServiceConfig(name: "middle", port: 3003), trusted: true)
+
+        let names = manager.snapshots.map(\.service.name)
+        XCTAssertEqual(names, ["alpha", "middle", "zebra"])
+    }
 }
 
 /// Opens a listening TCP socket on 127.0.0.1 with a kernel-assigned port.
