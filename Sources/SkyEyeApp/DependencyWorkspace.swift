@@ -321,7 +321,11 @@ struct DependencyWorkspace: View {
             }
     }
 
-    private var groups: [String] { Array(Set(manager.config.services.compactMap(\.group))).sorted() }
+    private var groups: [String] {
+        Array(Set(manager.config.services.compactMap(\.group))).sorted {
+            $0.localizedStandardCompare($1) == .orderedAscending
+        }
+    }
 
     private func groupAction(_ action: ControlRequest.Action, group: String) {
         let members = manager.snapshots.filter { $0.service.group == group && $0.service.command != nil }

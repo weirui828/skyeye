@@ -370,7 +370,9 @@ struct ServiceEditorView: View {
             guard let group = service.group?.trimmingCharacters(in: .whitespaces), !group.isEmpty else { return nil }
             return group
         }
-        return Array(Set(groups)).sorted()
+        return Array(Set(groups)).sorted {
+            $0.localizedStandardCompare($1) == .orderedAscending
+        }
     }
 
     private var isDirty: Bool {

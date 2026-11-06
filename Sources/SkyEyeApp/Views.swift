@@ -275,20 +275,55 @@ struct ServiceListView: View {
     @Binding var route: Route
     @State private var error: String?
 
-    private struct Section: Identifiable {
-        let group: String?
-        let items: [ServiceSnapshot]
-        var id: String { group.map { "g:" + $0 } ?? "ungrouped" }
+    private enum ListItem: Identifiable {
+        case group(name: String, items: [ServiceSnapshot])
+        case single(ServiceSnapshot)
+
+        var id: String {
+            switch self {
+            case .group(let name, _): return "g:" + name
+            case .single(let snapshot): return "s:" + snapshot.id
+            }
+        }
+
+        var sortKey: String {
+            switch self {
+            case .group(let name, _): return name
+            case .single(let snapshot): return snapshot.service.name
+            }
+        }
     }
 
-    /// Show ungrouped services first, then groups alphabetically.
-    private var sections: [Section] {
+    /// Sort services and groups alphabetically by display name.
+    private var items: [ListItem] {
         let regular = manager.snapshots.filter { $0.state != .pendingApproval }
-        let groups = Set(regular.compactMap { $0.service.group }).sorted {
-            $0.localizedStandardCompare($1) == .orderedAscending
+        var grouped: [String: [ServiceSnapshot]] = [:]
+        var singles: [ServiceSnapshot] = []
+
+        for snapshot in regular {
+            if let group = snapshot.service.group?.trimmingCharacters(in: .whitespaces), !group.isEmpty {
+                grouped[group, default: []].append(snapshot)
+            } else {
+                singles.append(snapshot)
+            }
         }
-        let order: [String?] = (regular.contains { $0.service.group == nil } ? [nil] : []) + groups.map(Optional.some)
-        return order.map { g in Section(group: g, items: regular.filter { $0.service.group == g }) }
+
+        var result: [ListItem] = []
+        for (group, groupItems) in grouped {
+            if groupItems.count > 1 {
+                let sortedItems = groupItems.sorted {
+                    $0.service.name.localizedStandardCompare($1.service.name) == .orderedAscending
+                }
+                result.append(.group(name: group, items: sortedItems))
+            } else {
+                result.append(contentsOf: groupItems.map { .single($0) })
+            }
+        }
+        result.append(contentsOf: singles.map { .single($0) })
+
+        return result.sorted {
+            $0.sortKey.localizedStandardCompare($1.sortKey) == .orderedAscending
+        }
     }
 
     private var upCount: Int {
@@ -340,21 +375,20 @@ struct ServiceListView: View {
                             sectionTitle("Needs your approval")
                             ForEach(pending) { ApprovalRow(snapshot: $0, onError: { error = $0 }) }
                         }
-                        ForEach(sections) { section in
-                            if let group = section.group, section.items.count > 1 {
+                        ForEach(items) { item in
+                            switch item {
+                            case .group(let group, let groupItems):
                                 VStack(spacing: 8) {
-                                    GroupHeader(group: group, items: section.items, onError: { error = $0 })
-                                    ForEach(section.items) { snapshot in
+                                    GroupHeader(group: group, items: groupItems, onError: { error = $0 })
+                                    ForEach(groupItems) { snapshot in
                                         ServiceCard(snapshot: snapshot, route: $route, onError: { error = $0 })
                                     }
                                 }
                                 .padding(9)
                                 .background(SkyEyeSurface.group, in: RoundedRectangle(cornerRadius: 13))
                                 .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(Color.primary.opacity(0.07)))
-                            } else {
-                                ForEach(section.items) { snapshot in
-                                    ServiceCard(snapshot: snapshot, route: $route, onError: { error = $0 })
-                                }
+                            case .single(let snapshot):
+                                ServiceCard(snapshot: snapshot, route: $route, onError: { error = $0 })
                             }
                         }
                     }
