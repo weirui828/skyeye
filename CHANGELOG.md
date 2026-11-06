@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0](https://github.com/weirui828/skyeye/compare/v0.1.3...v1.0.0) (2026-11-06)
+
+
+### Miscellaneous Chores
+
+* release 1.0.0 ([180d237](https://github.com/weirui828/skyeye/commit/180d2376c5587a7f96a404cd4709c290e51f8d2c))
+
 ## [0.1.3](https://github.com/weirui828/skyeye/compare/v0.1.2...v0.1.3) (2026-10-26)
 
 
