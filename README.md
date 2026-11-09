@@ -153,6 +153,72 @@ Changes to dependencies move affected cards automatically.
 Stopping a service leaves its dependencies running.
 In the canvas, SkyEye asks before it stops a dependency with active dependent services.
 
+## Check ports and network activity
+
+Select **Ports** above the service cards.
+A red count on the button shows how many programs need a look.
+
+The page lists each program that listens on a TCP port.
+It shows who started the program, how far the port can be reached, and a risk level.
+A program that belongs to a SkyEye service shows the service name.
+
+| Risk | Meaning |
+| --- | --- |
+| High | A debugger port, or a server or database that other computers can reach without a login. |
+| Medium | A port that other computers can reach, such as a macOS sharing service. |
+| Low | A server that you started. Only this Mac can reach it. |
+| Info | A helper of an installed app. Only this Mac can reach it. |
+
+Charts summarize the scan in three tabs:
+
+| Tab | Charts |
+| --- | --- |
+| Ports | Rings show how far each program can be reached. Dots show where the ports are by number. A timeline shows how long each server has run. A treemap shows memory use by project. |
+| Traffic | A flow chart shows which programs talk to which companies. A sunburst shows where the bytes go, by company, program, and address. Ridges show bytes per second for each program. |
+| Processes | A tree shows which process started each program. A circle shows which programs have a connection to another program on this Mac. |
+
+Point at a mark in a chart to read its details. Select the mark to find its row.
+In the sunburst, select a ring to zoom in. Select the center to zoom out.
+In the tree, select a branch to fold it.
+
+The circle of connections compares each connection with the dependencies that you set.
+A connection between two SkyEye services without a dependency has a different color.
+Use the buttons on a row to open the page, show the folder in Finder, or stop the program.
+For a service that SkyEye started, **Stop** stops the service.
+
+The **Outgoing** section lists programs with connections to other computers.
+SkyEye flags a program that is not code-signed.
+It also flags a connection from outside your network to a port that you listen on.
+
+### What the scan does
+
+SkyEye does not scan until you open the page for the first time.
+After that, it also scans once after it starts and when you open the menu.
+While the page is open, it scans every 30 seconds and samples traffic every 10 seconds.
+The scan runs `lsof`, `ps`, `nettop`, `ifconfig`, `codesign`, `dscacheutil`, and `socketfilterfw` with your user permissions.
+Byte counts cover connections that are open at the time of the scan.
+
+- SkyEye sends up to two HTTP requests to each listening port to learn what the port is.
+  It skips macOS services and databases. These requests can appear in your server logs.
+- SkyEye names the owner of an address from a built-in table, then from reverse DNS.
+  Reverse DNS lookups use the DNS settings of your Mac.
+- SkyEye does not contact whois registries by default.
+  To allow this, enable **Settings → Advanced → Ask whois registries who owns unknown addresses**.
+- SkyEye does not open a program to check its signature if macOS would ask you for access first.
+  This applies to the Desktop, Documents, and Downloads folders, cloud storage folders, and other disks.
+  The row shows where the program runs from.
+
+SkyEye decides what a program is from the file that the program runs.
+It does not trust the arguments of a program, because a program sets its own arguments.
+Text from other programs, such as page titles, appears as plain text.
+
+**Folder** shows the folder in Finder. It does not open or start anything.
+**Stop** checks that each process is still the one that the scan found. Then it sends a stop signal.
+
+The charts use a web view that loads only files inside the app.
+The chart page cannot load anything from the network.
+The chart page does not receive command lines, folders, or file paths.
+
 ## Read resource use
 
 The status badge changes every five seconds.
@@ -278,11 +344,13 @@ Cleanup resumes when SkyEye opens again.
 | Service definitions and app settings | `~/Library/Application Support/SkyEye/config.json` |
 | Current service log | `~/Library/Logs/SkyEye/<name>.log` |
 | Archived service logs | `~/Library/Logs/SkyEye/archive/<name>/` |
+| Address owners and connection history | `~/Library/Application Support/SkyEye/network.json` |
 
 These locations are outside this repository.
 Git does not include them when you push the repository.
 Configuration files can contain secrets in environment variables.
-Do not attach configuration files or raw logs to public issues.
+`network.json` lists programs on your Mac and the companies that they connect to.
+Do not attach configuration files, `network.json`, or raw logs to public issues.
 
 ## Test and package
 
@@ -292,6 +360,14 @@ The HTTP service tests need Python 3. CI provides Python 3.12.
 swift test --disable-sandbox
 python3 -m unittest discover -s scripts/tests -v
 ./scripts/package.sh
+```
+
+To open the ports page when the app starts, pass `--open-ports` to the app's executable.
+To preview the charts in a browser with demo data, serve the `Resources` folder.
+Then open `http://localhost:8765/charts-dev/preview.html`.
+
+```bash
+python3 -m http.server 8765 --bind 127.0.0.1 --directory Resources
 ```
 
 The package script creates an Apple Silicon app, a DMG, a ZIP, and SHA-256 checksums.
@@ -307,3 +383,6 @@ See [Repository protection](docs/REPOSITORY-SECURITY.md) for maintainer settings
 [Wei Rui (@weirui828)](https://github.com/weirui828) maintains SkyEye.
 
 Copyright (c) 2026 Wei Rui. Released under the [MIT License](LICENSE).
+
+The ports page includes [D3](https://d3js.org) 7.9.0, copyright Mike Bostock, under the [ISC License](Resources/charts/vendor/d3.LICENSE).
+The file is `Resources/charts/vendor/d3.min.js`. Its SHA-256 checksum is in `SHA256SUMS` beside it, and the build checks it.

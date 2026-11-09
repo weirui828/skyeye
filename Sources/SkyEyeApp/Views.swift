@@ -272,6 +272,7 @@ struct ErrorBanner: View {
 
 struct ServiceListView: View {
     @EnvironmentObject private var manager: ServiceManager
+    @EnvironmentObject private var monitor: NetworkMonitor
     @Binding var route: Route
     @State private var error: String?
 
@@ -356,6 +357,7 @@ struct ServiceListView: View {
                     Label("Canvas", systemImage: "point.3.connected.trianglepath.dotted")
                 }
                 .help("Open dependency canvas")
+                PortsButton()
                 Spacer()
                 Button { route = .edit(nil) } label: {
                     Label("Add service", systemImage: "plus")
@@ -400,6 +402,8 @@ struct ServiceListView: View {
             MenuDivider()
             footer
         }
+        // The Ports button's count comes from the last scan: refresh it when the menu opens.
+        .onAppear { monitor.rescanInBackground() }
     }
 
     private var footer: some View {

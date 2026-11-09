@@ -115,10 +115,16 @@ public struct Settings: Codable, Hashable, Sendable {
     public var logRetentionDays = 7
     public var autoStartMode: AutoStartMode = .none
     public var autoStartServices: [String] = []
+    /// Ask the public whois registries who owns an address that reverse DNS doesn't name.
+    /// Off by default: it sends the address to a third party.
+    public var whoisLookups = false
 
     public init() {}
 
-    enum CodingKeys: String, CodingKey { case requireApproval, notifications, shell, loadShellProfile, keepRunningOnQuit, logRetentionDays, autoStartMode, autoStartServices }
+    enum CodingKeys: String, CodingKey {
+        case requireApproval, notifications, shell, loadShellProfile, keepRunningOnQuit, logRetentionDays
+        case autoStartMode, autoStartServices, whoisLookups
+    }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -130,6 +136,7 @@ public struct Settings: Codable, Hashable, Sendable {
         logRetentionDays = try c.decodeIfPresent(Int.self, forKey: .logRetentionDays) ?? 7
         autoStartMode = try c.decodeIfPresent(AutoStartMode.self, forKey: .autoStartMode) ?? .none
         autoStartServices = try c.decodeIfPresent([String].self, forKey: .autoStartServices) ?? []
+        whoisLookups = try c.decodeIfPresent(Bool.self, forKey: .whoisLookups) ?? false
     }
 }
 

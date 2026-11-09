@@ -1,0 +1,1478 @@
+{
+ "scan": {
+  "programs": [
+   {
+    "pid": 4101,
+    "name": "Notebook",
+    "process": "python3.12",
+    "command": "python3.12",
+    "ports": [
+     {
+      "port": 8888,
+      "address": "0.0.0.0",
+      "exposure": "all",
+      "isDebugger": false,
+      "status": 200,
+      "title": "Notebook"
+     }
+    ],
+    "exposure": "all",
+    "section": "servers",
+    "kind": "web",
+    "risk": "high",
+    "reasons": [
+     "Open to every network this Mac joins with no login"
+    ],
+    "place": "",
+    "startedBy": "terminal",
+    "startedAt": 1793944800000,
+    "rssKb": 317440,
+    "cpu": 0.4,
+    "stopPids": [
+     4101
+    ],
+    "managed": false,
+    "project": "research",
+    "folder": "/Users/demo/dev/research"
+   },
+   {
+    "pid": 4202,
+    "name": "Storefront",
+    "process": "node",
+    "command": "node",
+    "ports": [
+     {
+      "port": 9229,
+      "address": "127.0.0.1",
+      "exposure": "loopback",
+      "isDebugger": true
+     },
+     {
+      "port": 3000,
+      "address": "127.0.0.1",
+      "exposure": "loopback",
+      "isDebugger": false,
+      "status": 200,
+      "title": "Storefront"
+     }
+    ],
+    "exposure": "loopback",
+    "section": "servers",
+    "kind": "debugger",
+    "risk": "high",
+    "reasons": [
+     "Debugger on 9229 with no login: any program on this Mac can take over Storefront"
+    ],
+    "place": "web",
+    "startedBy": "SkyEye",
+    "startedAt": 1794200400000,
+    "rssKb": 430080,
+    "cpu": 0.4,
+    "stopPids": [
+     4202
+    ],
+    "managed": true,
+    "project": "shop",
+    "folder": "/Users/demo/dev/shop",
+    "service": "web"
+   },
+   {
+    "pid": 612,
+    "name": "AirPlay Receiver",
+    "process": "ControlCenter",
+    "command": "ControlCenter",
+    "ports": [
+     {
+      "port": 5000,
+      "address": "*",
+      "exposure": "all",
+      "isDebugger": false
+     },
+     {
+      "port": 7000,
+      "address": "*",
+      "exposure": "all",
+      "isDebugger": false,
+      "status": 403
+     }
+    ],
+    "exposure": "all",
+    "section": "system",
+    "kind": "web",
+    "risk": "medium",
+    "reasons": [
+     "Open to every network this Mac joins: a macOS service, switch it off in System Settings if you don't use it"
+    ],
+    "place": "",
+    "startedBy": "launchd",
+    "startedAt": 1793181600000,
+    "rssKb": 49152,
+    "cpu": 0.4,
+    "stopPids": [
+     612
+    ],
+    "managed": false
+   },
+   {
+    "pid": 4303,
+    "name": "vite",
+    "process": "node",
+    "command": "node",
+    "ports": [
+     {
+      "port": 5173,
+      "address": "192.168.1.24",
+      "exposure": "lan",
+      "isDebugger": false
+     }
+    ],
+    "exposure": "lan",
+    "section": "servers",
+    "kind": "service",
+    "risk": "medium",
+    "reasons": [
+     "Open to your local network"
+    ],
+    "place": "apps/ui",
+    "startedBy": "Claude session",
+    "startedAt": 1794216000000,
+    "rssKb": 184320,
+    "cpu": 0.4,
+    "stopPids": [
+     4303
+    ],
+    "managed": false,
+    "project": "dashboard",
+    "folder": "/Users/demo/dev/dashboard"
+   },
+   {
+    "pid": 1799,
+    "name": "PostgreSQL",
+    "process": "postgres",
+    "command": "postgres",
+    "ports": [
+     {
+      "port": 5432,
+      "address": "[::1]",
+      "exposure": "loopback",
+      "isDebugger": false
+     }
+    ],
+    "exposure": "loopback",
+    "section": "servers",
+    "kind": "database",
+    "risk": "low",
+    "reasons": [
+     "Database, this Mac only"
+    ],
+    "place": "",
+    "startedBy": "SkyEye",
+    "startedAt": 1793440800000,
+    "rssKb": 98304,
+    "cpu": 0.4,
+    "stopPids": [
+     1799
+    ],
+    "managed": true,
+    "project": "shop",
+    "folder": "/Users/demo/dev/shop",
+    "service": "postgres"
+   },
+   {
+    "pid": 1803,
+    "name": "Redis",
+    "process": "redis-server",
+    "command": "redis-server",
+    "ports": [
+     {
+      "port": 6379,
+      "address": "127.0.0.1",
+      "exposure": "loopback",
+      "isDebugger": false
+     }
+    ],
+    "exposure": "loopback",
+    "section": "servers",
+    "kind": "database",
+    "risk": "low",
+    "reasons": [
+     "Database, this Mac only"
+    ],
+    "place": "",
+    "startedBy": "SkyEye",
+    "startedAt": 1793440800000,
+    "rssKb": 22528,
+    "cpu": 0.4,
+    "stopPids": [
+     1803
+    ],
+    "managed": true,
+    "project": "shop",
+    "folder": "/Users/demo/dev/shop",
+    "service": "redis"
+   },
+   {
+    "pid": 4404,
+    "name": "Shop API",
+    "process": "python3.12",
+    "command": "python3.12",
+    "ports": [
+     {
+      "port": 8000,
+      "address": "127.0.0.1",
+      "exposure": "loopback",
+      "isDebugger": false,
+      "status": 200,
+      "title": "Shop API"
+     }
+    ],
+    "exposure": "loopback",
+    "section": "servers",
+    "kind": "web",
+    "risk": "low",
+    "reasons": [
+     "This Mac only"
+    ],
+    "place": "api",
+    "startedBy": "SkyEye",
+    "startedAt": 1794200400000,
+    "rssKb": 235520,
+    "cpu": 0.4,
+    "stopPids": [
+     4404
+    ],
+    "managed": true,
+    "project": "shop",
+    "folder": "/Users/demo/dev/shop",
+    "service": "api"
+   },
+   {
+    "pid": 4505,
+    "name": "worker",
+    "process": "node",
+    "command": "node",
+    "ports": [
+     {
+      "port": 9100,
+      "address": "127.0.0.1",
+      "exposure": "loopback",
+      "isDebugger": false,
+      "status": 404
+     }
+    ],
+    "exposure": "loopback",
+    "section": "servers",
+    "kind": "web",
+    "risk": "low",
+    "reasons": [
+     "This Mac only"
+    ],
+    "place": "worker",
+    "startedBy": "SkyEye",
+    "startedAt": 1794124800000,
+    "rssKb": 143360,
+    "cpu": 0.4,
+    "stopPids": [
+     4505
+    ],
+    "managed": true,
+    "project": "shop",
+    "folder": "/Users/demo/dev/shop",
+    "service": "worker"
+   },
+   {
+    "pid": 4606,
+    "name": "Dashboard",
+    "process": "node",
+    "command": "node",
+    "ports": [
+     {
+      "port": 4000,
+      "address": "127.0.0.1",
+      "exposure": "loopback",
+      "isDebugger": false,
+      "status": 200,
+      "title": "Dashboard"
+     }
+    ],
+    "exposure": "loopback",
+    "section": "servers",
+    "kind": "web",
+    "risk": "low",
+    "reasons": [
+     "This Mac only"
+    ],
+    "place": "apps/api",
+    "startedBy": "terminal",
+    "startedAt": 1794211200000,
+    "rssKb": 266240,
+    "cpu": 0.4,
+    "stopPids": [
+     4606
+    ],
+    "managed": false,
+    "project": "dashboard",
+    "folder": "/Users/demo/dev/dashboard"
+   },
+   {
+    "pid": 880,
+    "name": "Zed",
+    "process": "zed",
+    "command": "zed",
+    "ports": [
+     {
+      "port": 44438,
+      "address": "127.0.0.1",
+      "exposure": "loopback",
+      "isDebugger": false
+     }
+    ],
+    "exposure": "loopback",
+    "section": "apps",
+    "kind": "service",
+    "risk": "info",
+    "reasons": [
+     "This Mac only"
+    ],
+    "place": "",
+    "startedBy": "launchd",
+    "startedAt": 1794045600000,
+    "rssKb": 522240,
+    "cpu": 0.4,
+    "stopPids": [
+     880
+    ],
+    "managed": false
+   },
+   {
+    "pid": 905,
+    "name": "Figma",
+    "process": "figma_agent",
+    "command": "figma_agent",
+    "ports": [
+     {
+      "port": 44950,
+      "address": "127.0.0.1",
+      "exposure": "loopback",
+      "isDebugger": false
+     },
+     {
+      "port": 44960,
+      "address": "127.0.0.1",
+      "exposure": "loopback",
+      "isDebugger": false
+     }
+    ],
+    "exposure": "loopback",
+    "section": "apps",
+    "kind": "service",
+    "risk": "info",
+    "reasons": [
+     "This Mac only"
+    ],
+    "place": "",
+    "startedBy": "launchd",
+    "startedAt": 1793700000000,
+    "rssKb": 122880,
+    "cpu": 0.4,
+    "stopPids": [
+     905
+    ],
+    "managed": false
+   },
+   {
+    "pid": 958,
+    "name": "Continuity",
+    "process": "rapportd",
+    "command": "rapportd",
+    "ports": [
+     {
+      "port": 52580,
+      "address": "*",
+      "exposure": "all",
+      "isDebugger": false
+     }
+    ],
+    "exposure": "all",
+    "section": "system",
+    "kind": "service",
+    "risk": "medium",
+    "reasons": [
+     "Open to every network this Mac joins: a macOS service, switch it off in System Settings if you don't use it"
+    ],
+    "place": "",
+    "startedBy": "launchd",
+    "startedAt": 1793181600000,
+    "rssKb": 14336,
+    "cpu": 0.4,
+    "stopPids": [
+     958
+    ],
+    "managed": false
+   }
+  ],
+  "outgoing": [
+   {
+    "name": "miner",
+    "section": "servers",
+    "path": "/Applications/miner.app/Contents/MacOS/miner",
+    "pids": [
+     1005
+    ],
+    "signer": "unsigned",
+    "peers": [
+     {
+      "owner": "Shady Hosting",
+      "count": 2,
+      "ports": [
+       3333
+      ],
+      "ips": [],
+      "hosts": [],
+      "inbound": 0
+     }
+    ],
+    "count": 2,
+    "flags": [
+     {
+      "level": "alert",
+      "text": "Not code-signed"
+     },
+     {
+      "level": "note",
+      "text": "Unusual port 3333 to Shady Hosting"
+     },
+     {
+      "level": "note",
+      "text": "New: first seen talking out today"
+     }
+    ],
+    "firstSeen": 1794045600000,
+    "earlier": []
+   },
+   {
+    "name": "Shop API",
+    "section": "servers",
+    "path": "/Applications/Shop API.app/Contents/MacOS/Shop API",
+    "pids": [
+     1008
+    ],
+    "signer": "ad-hoc",
+    "peers": [
+     {
+      "owner": "AWS",
+      "count": 3,
+      "ports": [
+       443
+      ],
+      "ips": [],
+      "hosts": [],
+      "inbound": 0
+     },
+     {
+      "owner": "GitHub",
+      "count": 1,
+      "ports": [
+       443
+      ],
+      "ips": [],
+      "hosts": [],
+      "inbound": 0
+     }
+    ],
+    "count": 4,
+    "flags": [
+     {
+      "level": "note",
+      "text": "Ad-hoc signed: built on this Mac, no developer identity"
+     },
+     {
+      "level": "note",
+      "text": "A program you started talks out to AWS, GitHub"
+     }
+    ],
+    "firstSeen": 1794045600000,
+    "earlier": []
+   },
+   {
+    "name": "Google Chrome",
+    "section": "apps",
+    "path": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "pids": [
+     1013
+    ],
+    "signer": "Google LLC",
+    "peers": [
+     {
+      "owner": "Google",
+      "count": 18,
+      "ports": [
+       443
+      ],
+      "ips": [],
+      "hosts": [],
+      "inbound": 0
+     },
+     {
+      "owner": "Cloudflare",
+      "count": 9,
+      "ports": [
+       443
+      ],
+      "ips": [],
+      "hosts": [],
+      "inbound": 0
+     },
+     {
+      "owner": "Meta",
+      "count": 4,
+      "ports": [
+       443
+      ],
+      "ips": [],
+      "hosts": [],
+      "inbound": 0
+     },
+     {
+      "owner": "AWS",
+      "count": 3,
+      "ports": [
+       443
+      ],
+      "ips": [],
+      "hosts": [],
+      "inbound": 0
+     },
+     {
+      "owner": "Fastly",
+      "count": 2,
+      "ports": [
+       443
+      ],
+      "ips": [],
+      "hosts": [],
+      "inbound": 0
+     }
+    ],
+    "count": 36,
+    "flags": [],
+    "firstSeen": 1794045600000,
+    "earlier": [
+     "Akamai"
+    ]
+   },
+   {
+    "name": "Claude",
+    "section": "apps",
+    "path": "/Applications/Claude.app/Contents/MacOS/Claude",
+    "pids": [
+     1006
+    ],
+    "signer": "Anthropic PBC",
+    "peers": [
+     {
+      "owner": "Anthropic",
+      "count": 6,
+      "ports": [
+       443
+      ],
+      "ips": [],
+      "hosts": [],
+      "inbound": 0
+     },
+     {
+      "owner": "Cloudflare",
+      "count": 2,
+      "ports": [
+       443
+      ],
+      "ips": [],
+      "hosts": [],
+      "inbound": 0
+     }
+    ],
+    "count": 8,
+    "flags": [],
+    "firstSeen": 1794045600000,
+    "earlier": []
+   },
+   {
+    "name": "Zed",
+    "section": "apps",
+    "path": "/Applications/Zed.app/Contents/MacOS/Zed",
+    "pids": [
+     1003
+    ],
+    "signer": "Zed Industries, Inc.",
+    "peers": [
+     {
+      "owner": "GitHub",
+      "count": 3,
+      "ports": [
+       443
+      ],
+      "ips": [],
+      "hosts": [],
+      "inbound": 0
+     },
+     {
+      "owner": "Anthropic",
+      "count": 2,
+      "ports": [
+       443
+      ],
+      "ips": [],
+      "hosts": [],
+      "inbound": 0
+     }
+    ],
+    "count": 5,
+    "flags": [],
+    "firstSeen": 1794045600000,
+    "earlier": []
+   },
+   {
+    "name": "Apple Push",
+    "section": "system",
+    "path": "/Applications/Apple Push.app/Contents/MacOS/Apple Push",
+    "pids": [
+     1010
+    ],
+    "signer": "Apple",
+    "peers": [
+     {
+      "owner": "Apple",
+      "count": 2,
+      "ports": [
+       5223
+      ],
+      "ips": [],
+      "hosts": [],
+      "inbound": 0
+     }
+    ],
+    "count": 2,
+    "flags": [],
+    "firstSeen": 1794045600000,
+    "earlier": []
+   },
+   {
+    "name": "Messages & Continuity",
+    "section": "system",
+    "path": "/Applications/Messages & Continuity.app/Contents/MacOS/Messages & Continuity",
+    "pids": [
+     1021
+    ],
+    "signer": "Apple",
+    "peers": [
+     {
+      "owner": "Apple",
+      "count": 3,
+      "ports": [
+       443
+      ],
+      "ips": [],
+      "hosts": [],
+      "inbound": 0
+     },
+     {
+      "owner": "Local network",
+      "count": 2,
+      "ports": [
+       49152
+      ],
+      "ips": [],
+      "hosts": [],
+      "inbound": 0
+     }
+    ],
+    "count": 5,
+    "flags": [],
+    "firstSeen": 1794045600000,
+    "earlier": []
+   }
+  ],
+  "firewall": true,
+  "scannedAt": 1794218400000,
+  "tree": [
+   {
+    "pid": 1,
+    "ppid": 0,
+    "name": "launchd",
+    "ports": []
+   },
+   {
+    "pid": 300,
+    "ppid": 1,
+    "name": "SkyEye",
+    "ports": []
+   },
+   {
+    "pid": 1799,
+    "ppid": 300,
+    "name": "PostgreSQL",
+    "ports": [
+     5432
+    ],
+    "risk": "low",
+    "section": "servers"
+   },
+   {
+    "pid": 1803,
+    "ppid": 300,
+    "name": "Redis",
+    "ports": [
+     6379
+    ],
+    "risk": "low",
+    "section": "servers"
+   },
+   {
+    "pid": 4400,
+    "ppid": 300,
+    "name": "zsh",
+    "ports": []
+   },
+   {
+    "pid": 4404,
+    "ppid": 4400,
+    "name": "Shop API",
+    "ports": [
+     8000
+    ],
+    "risk": "low",
+    "section": "servers"
+   },
+   {
+    "pid": 4200,
+    "ppid": 300,
+    "name": "zsh",
+    "ports": []
+   },
+   {
+    "pid": 4201,
+    "ppid": 4200,
+    "name": "npm",
+    "ports": []
+   },
+   {
+    "pid": 4202,
+    "ppid": 4201,
+    "name": "Storefront",
+    "ports": [
+     9229,
+     3000
+    ],
+    "risk": "high",
+    "section": "servers"
+   },
+   {
+    "pid": 4500,
+    "ppid": 300,
+    "name": "zsh",
+    "ports": []
+   },
+   {
+    "pid": 4505,
+    "ppid": 4500,
+    "name": "worker",
+    "ports": [
+     9100
+    ],
+    "risk": "low",
+    "section": "servers"
+   },
+   {
+    "pid": 310,
+    "ppid": 1,
+    "name": "Terminal",
+    "ports": []
+   },
+   {
+    "pid": 4100,
+    "ppid": 310,
+    "name": "zsh",
+    "ports": []
+   },
+   {
+    "pid": 4101,
+    "ppid": 4100,
+    "name": "Notebook",
+    "ports": [
+     8888
+    ],
+    "risk": "high",
+    "section": "servers"
+   },
+   {
+    "pid": 4600,
+    "ppid": 310,
+    "name": "zsh",
+    "ports": []
+   },
+   {
+    "pid": 4606,
+    "ppid": 4600,
+    "name": "Dashboard",
+    "ports": [
+     4000
+    ],
+    "risk": "low",
+    "section": "servers"
+   },
+   {
+    "pid": 316,
+    "ppid": 1,
+    "name": "Claude Code",
+    "ports": []
+   },
+   {
+    "pid": 4300,
+    "ppid": 316,
+    "name": "zsh",
+    "ports": []
+   },
+   {
+    "pid": 4301,
+    "ppid": 4300,
+    "name": "pnpm",
+    "ports": []
+   },
+   {
+    "pid": 4303,
+    "ppid": 4301,
+    "name": "vite",
+    "ports": [
+     5173
+    ],
+    "risk": "medium",
+    "section": "servers"
+   },
+   {
+    "pid": 612,
+    "ppid": 1,
+    "name": "AirPlay Receiver",
+    "ports": [
+     5000,
+     7000
+    ],
+    "risk": "medium",
+    "section": "system"
+   },
+   {
+    "pid": 958,
+    "ppid": 1,
+    "name": "Continuity",
+    "ports": [
+     52580
+    ],
+    "risk": "medium",
+    "section": "system"
+   },
+   {
+    "pid": 870,
+    "ppid": 1,
+    "name": "Zed",
+    "ports": []
+   },
+   {
+    "pid": 880,
+    "ppid": 870,
+    "name": "Zed",
+    "ports": [
+     44438
+    ],
+    "risk": "info",
+    "section": "apps"
+   },
+   {
+    "pid": 900,
+    "ppid": 1,
+    "name": "Figma",
+    "ports": []
+   },
+   {
+    "pid": 905,
+    "ppid": 900,
+    "name": "Figma",
+    "ports": [
+     44950,
+     44960
+    ],
+    "risk": "info",
+    "section": "apps"
+   }
+  ],
+  "local": {
+   "nodes": [
+    {
+     "id": "Google Chrome",
+     "group": "Apps"
+    },
+    {
+     "id": "Zed",
+     "group": "Apps"
+    },
+    {
+     "id": "Dashboard",
+     "group": "dashboard"
+    },
+    {
+     "id": "vite",
+     "group": "dashboard"
+    },
+    {
+     "id": "psql",
+     "group": "Other"
+    },
+    {
+     "id": "Notebook",
+     "group": "research"
+    },
+    {
+     "id": "api",
+     "group": "shop",
+     "service": "api"
+    },
+    {
+     "id": "postgres",
+     "group": "shop",
+     "service": "postgres"
+    },
+    {
+     "id": "redis",
+     "group": "shop",
+     "service": "redis"
+    },
+    {
+     "id": "web",
+     "group": "shop",
+     "service": "web"
+    },
+    {
+     "id": "worker",
+     "group": "shop",
+     "service": "worker"
+    }
+   ],
+   "links": [
+    {
+     "from": "api",
+     "to": "postgres",
+     "port": 5432,
+     "count": 6,
+     "bytes": 860160,
+     "declared": true
+    },
+    {
+     "from": "web",
+     "to": "api",
+     "port": 8000,
+     "count": 4,
+     "bytes": 2355200,
+     "declared": true
+    },
+    {
+     "from": "worker",
+     "to": "redis",
+     "port": 6379,
+     "count": 3,
+     "bytes": 122880,
+     "declared": true
+    },
+    {
+     "from": "api",
+     "to": "redis",
+     "port": 6379,
+     "count": 2,
+     "bytes": 65536,
+     "declared": false
+    },
+    {
+     "from": "worker",
+     "to": "postgres",
+     "port": 5432,
+     "count": 2,
+     "bytes": 317440,
+     "declared": false
+    },
+    {
+     "from": "Google Chrome",
+     "to": "web",
+     "port": 3000,
+     "count": 3,
+     "bytes": 5324800
+    },
+    {
+     "from": "Google Chrome",
+     "to": "Dashboard",
+     "port": 4000,
+     "count": 2,
+     "bytes": 921600
+    },
+    {
+     "from": "vite",
+     "to": "Dashboard",
+     "port": 4000,
+     "count": 1,
+     "bytes": 40960
+    },
+    {
+     "from": "Notebook",
+     "to": "postgres",
+     "port": 5432,
+     "count": 1,
+     "bytes": 2252800
+    },
+    {
+     "from": "psql",
+     "to": "postgres",
+     "port": 5432,
+     "count": 1,
+     "bytes": 12288
+    },
+    {
+     "from": "Zed",
+     "to": "vite",
+     "port": 5173,
+     "count": 1,
+     "bytes": 8192
+    }
+   ]
+  },
+  "traffic": [
+   {
+    "name": "Google Chrome",
+    "bytesIn": 13291520,
+    "bytesOut": 803840,
+    "peers": [
+     {
+      "owner": "Google",
+      "host": "lax17s55-in-f14.1e100.net",
+      "bytesIn": 5324800,
+      "bytesOut": 317440
+     },
+     {
+      "owner": "Google",
+      "host": "lax31s12-in-f3.1e100.net",
+      "bytesIn": 1945600,
+      "bytesOut": 122880
+     },
+     {
+      "owner": "Cloudflare",
+      "host": "104.18.32.47",
+      "bytesIn": 2662400,
+      "bytesOut": 143360
+     },
+     {
+      "owner": "Cloudflare",
+      "host": "172.64.155.209",
+      "bytesIn": 819200,
+      "bytesOut": 61440
+     },
+     {
+      "owner": "Meta",
+      "host": "edge-star-shv-01-lax3.facebook.com",
+      "bytesIn": 1433600,
+      "bytesOut": 92160
+     },
+     {
+      "owner": "AWS",
+      "host": "ec2-52-9-14-200.us-west-1.compute.amazonaws.com",
+      "bytesIn": 716800,
+      "bytesOut": 46080
+     },
+     {
+      "owner": "Fastly",
+      "host": "151.101.1.140",
+      "bytesIn": 389120,
+      "bytesOut": 20480
+     }
+    ]
+   },
+   {
+    "name": "Claude",
+    "bytesIn": 1167360,
+    "bytesOut": 2181120,
+    "peers": [
+     {
+      "owner": "Anthropic",
+      "host": "160.79.104.10",
+      "bytesIn": 921600,
+      "bytesOut": 2150400
+     },
+     {
+      "owner": "Cloudflare",
+      "host": "104.18.37.228",
+      "bytesIn": 245760,
+      "bytesOut": 30720
+     }
+    ]
+   },
+   {
+    "name": "Shop API",
+    "bytesIn": 3235840,
+    "bytesOut": 94208,
+    "peers": [
+     {
+      "owner": "AWS",
+      "host": "s3-us-west-2.amazonaws.com",
+      "bytesIn": 3174400,
+      "bytesOut": 81920
+     },
+     {
+      "owner": "GitHub",
+      "host": "lb-140-82-116-4-sea.github.com",
+      "bytesIn": 61440,
+      "bytesOut": 12288
+     }
+    ]
+   },
+   {
+    "name": "Zed",
+    "bytesIn": 747520,
+    "bytesOut": 691200,
+    "peers": [
+     {
+      "owner": "GitHub",
+      "host": "lb-140-82-113-22-iad.github.com",
+      "bytesIn": 430080,
+      "bytesOut": 35840
+     },
+     {
+      "owner": "Anthropic",
+      "host": "160.79.104.12",
+      "bytesIn": 317440,
+      "bytesOut": 655360
+     }
+    ]
+   },
+   {
+    "name": "Messages & Continuity",
+    "bytesIn": 174080,
+    "bytesOut": 142336,
+    "peers": [
+     {
+      "owner": "Apple",
+      "host": "17.57.144.25",
+      "bytesIn": 112640,
+      "bytesOut": 97280
+     },
+     {
+      "owner": "Local network",
+      "host": "192.168.1.31",
+      "bytesIn": 61440,
+      "bytesOut": 45056
+     }
+    ]
+   },
+   {
+    "name": "Apple Push",
+    "bytesIn": 36864,
+    "bytesOut": 22528,
+    "peers": [
+     {
+      "owner": "Apple",
+      "host": "17.57.146.52",
+      "bytesIn": 36864,
+      "bytesOut": 22528
+     }
+    ]
+   },
+   {
+    "name": "miner",
+    "bytesIn": 14336,
+    "bytesOut": 5324800,
+    "peers": [
+     {
+      "owner": "Shady Hosting",
+      "host": "203.0.113.7",
+      "bytesIn": 14336,
+      "bytesOut": 5324800
+     }
+    ]
+   }
+  ]
+ },
+ "history": {
+  "times": [
+   1794218110000,
+   1794218120000,
+   1794218130000,
+   1794218140000,
+   1794218150000,
+   1794218160000,
+   1794218170000,
+   1794218180000,
+   1794218190000,
+   1794218200000,
+   1794218210000,
+   1794218220000,
+   1794218230000,
+   1794218240000,
+   1794218250000,
+   1794218260000,
+   1794218270000,
+   1794218280000,
+   1794218290000,
+   1794218300000,
+   1794218310000,
+   1794218320000,
+   1794218330000,
+   1794218340000,
+   1794218350000,
+   1794218360000,
+   1794218370000,
+   1794218380000,
+   1794218390000,
+   1794218400000
+  ],
+  "series": [
+   {
+    "name": "Google Chrome",
+    "rates": [
+     42000,
+     61284,
+     71544,
+     67981,
+     52261,
+     31739,
+     16019,
+     12456,
+     22716,
+     42000,
+     61284,
+     71544,
+     67981,
+     52261,
+     31739,
+     16019,
+     12456,
+     22716,
+     202000,
+     221284,
+     231544,
+     227981,
+     52261,
+     31739,
+     16019,
+     12456,
+     22716,
+     42000,
+     61284,
+     71544
+    ]
+   },
+   {
+    "name": "miner",
+    "rates": [
+     88000,
+     93706,
+     91527,
+     84473,
+     82294,
+     88000,
+     93706,
+     91527,
+     84473,
+     82294,
+     88000,
+     93706,
+     91527,
+     84473,
+     82294,
+     88000,
+     93706,
+     91527,
+     84473,
+     82294,
+     88000,
+     93706,
+     91527,
+     84473,
+     82294,
+     88000,
+     93706,
+     91527,
+     84473,
+     82294
+    ]
+   },
+   {
+    "name": "Shop API",
+    "rates": [
+     7800,
+     7291,
+     5900,
+     4000,
+     2100,
+     709,
+     210200,
+     210709,
+     212100,
+     214000,
+     5900,
+     7291,
+     7800,
+     7291,
+     5900,
+     4000,
+     2100,
+     709,
+     200,
+     709,
+     2100,
+     4000,
+     5900,
+     7291,
+     7800,
+     7291,
+     5900,
+     4000,
+     2100,
+     709
+    ]
+   },
+   {
+    "name": "Claude",
+    "rates": [
+     17287,
+     12688,
+     5312,
+     713,
+     2354,
+     9000,
+     15646,
+     17287,
+     12688,
+     5312,
+     713,
+     2354,
+     9000,
+     15646,
+     17287,
+     12688,
+     5312,
+     713,
+     2354,
+     9000,
+     15646,
+     17287,
+     12688,
+     5312,
+     713,
+     2354,
+     9000,
+     15646,
+     17287,
+     12688
+    ]
+   },
+   {
+    "name": "Zed",
+    "rates": [
+     1200,
+     553,
+     154,
+     154,
+     553,
+     1200,
+     1847,
+     2246,
+     2246,
+     1847,
+     1200,
+     553,
+     154,
+     154,
+     553,
+     1200,
+     1847,
+     2246,
+     2246,
+     1847,
+     1200,
+     553,
+     154,
+     154,
+     553,
+     1200,
+     1847,
+     2246,
+     2246,
+     1847
+    ]
+   },
+   {
+    "name": "Messages & Continuity",
+    "rates": [
+     300,
+     542,
+     542,
+     300,
+     58,
+     58,
+     300,
+     542,
+     542,
+     300,
+     58,
+     58,
+     300,
+     542,
+     542,
+     300,
+     58,
+     58,
+     300,
+     542,
+     542,
+     300,
+     58,
+     58,
+     300,
+     542,
+     542,
+     300,
+     58,
+     58
+    ]
+   },
+   {
+    "name": "Apple Push",
+    "rates": [
+     40,
+     56,
+     70,
+     78,
+     80,
+     75,
+     64,
+     48,
+     32,
+     16,
+     5,
+     0,
+     2,
+     10,
+     24,
+     40,
+     56,
+     70,
+     78,
+     80,
+     75,
+     64,
+     48,
+     32,
+     16,
+     5,
+     0,
+     2,
+     10,
+     24
+    ]
+   }
+  ]
+ }
+}

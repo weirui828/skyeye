@@ -11,6 +11,7 @@ struct SkyEyeApp: App {
         MenuBarExtra {
             MenuContentView()
                 .environmentObject(appDelegate.manager)
+                .environmentObject(appDelegate.monitor)
         } label: {
             MenuBarLabel(manager: appDelegate.manager)
         }
@@ -60,6 +61,7 @@ struct MenuBarLabel: View {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let manager = ServiceManager()
+    private(set) lazy var monitor = NetworkMonitor(manager: manager)
     private var server: ControlServer?
     private let notifier = Notifier()
 
@@ -92,6 +94,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         manager.startMonitoring()
         manager.startConfiguredServices()
         notifier.requestAuthorization()
+        if CommandLine.arguments.contains("--open-ports") {
+            PortsWindowController.shared.show(manager: manager, monitor: monitor)
+        } else {
+            // One scan once things have settled, so the menu's Ports button knows whether anything needs a look.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [monitor] in monitor.rescanInBackground() }
+        }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

@@ -20,6 +20,7 @@ Built natively for macOS. Open source. Works with your terminal and AI coding ag
 | Bring up a project | Start a service and its dependencies, or start a whole group. |
 | Understand a failure | Open the service's logs from its card. |
 | Watch something you started elsewhere | Add its port as a monitor-only service, with no start command. |
+| Check what's exposed | Open **Ports** to see every listening port, how far it can be reached, and which programs talk to the internet. |
 
 Point at a service card to find its start, stop, restart, URL, logs, and edit buttons.
 

@@ -20,5 +20,9 @@ Command approval controls commands added through the CLI or MCP.
 The local control socket accepts connections from the same user account.
 It is not a security boundary against malicious software already running as that user.
 
+The Ports page reports what SkyEye can see with the current user's permissions.
+It shows text that other programs choose, such as page titles and file names. SkyEye treats this text as untrusted.
+The page is not a malware detector. Software already running as that user can hide from the page or mislead it.
+
 Keep command approval enabled. Review commands before approval.
 Use services and AI agent integrations that you trust.
