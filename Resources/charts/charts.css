@@ -1,0 +1,156 @@
+/* Colors follow the app's surfaces. Risk uses fixed status steps (always beside a label),
+   time one blue ramp, projects and services eight categorical slots. */
+:root {
+  color-scheme: light dark;
+  --page: #fbfbfb;
+  --card: #ffffff;
+  --edge: rgba(0, 0, 0, 0.07);
+  --ink: #0b0b0b;
+  --muted: #6f6e69;
+  --grid: #e1e0d9;
+  --risk-high: #d03b3b;
+  --risk-medium: #fab219;
+  --risk-low: #6da7ec;
+  --risk-info: #b4b2a7;
+  --band-all: rgba(208, 59, 59, 0.06);
+  --band-lan: rgba(250, 178, 25, 0.08);
+  --band-loop: rgba(11, 11, 11, 0.035);
+  --s0: #2a78d6; --s1: #eb6834; --s2: #1baf7a; --s3: #eda100;
+  --s4: #e87ba4; --s5: #008300; --s6: #6250d6; --s7: #e34948;
+  --other: #898781;
+  --wash: rgba(11, 11, 11, 0.04);
+  --fresh: #86b6ef;
+  --stale: #256abf;
+  --mark: #898781;
+  --node: #52514e;
+  --band-opacity: 0.42;
+  --ok: #1baf7a;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #1f1f1f;
+    --card: #2b2b2b;
+    --edge: rgba(255, 255, 255, 0.08);
+    --ink: #f0efec;
+    --muted: #a3a29b;
+    --grid: #454542;
+    --risk-low: #5598e7;
+    --risk-info: #6b6a66;
+    --band-all: rgba(208, 59, 59, 0.12);
+    --band-lan: rgba(250, 178, 25, 0.09);
+    --band-loop: rgba(255, 255, 255, 0.05);
+    --s0: #3987e5; --s1: #d95926; --s2: #199e70; --s3: #c98500;
+    --s4: #d55181; --s5: #008300; --s6: #9085e9; --s7: #e66767;
+    --other: #6f6e69;
+    --wash: rgba(255, 255, 255, 0.05);
+    --fresh: #1c5cab;
+    --stale: #5598e7;
+    --node: #c3c2b7;
+    --band-opacity: 0.55;
+    --ok: #199e70;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--page); }
+body {
+  color: var(--ink);
+  font: 12px/1.35 -apple-system, system-ui, sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+#board { padding: 12px 12px 4px; }
+.card {
+  background: var(--card);
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  padding: 11px 13px 12px;
+  margin-bottom: 12px;
+}
+.card h2 { margin: 0 0 8px; font-size: 12px; font-weight: 600; }
+.card h2 span { margin-left: 6px; color: var(--muted); font-weight: 400; }
+.empty { margin: 40px 0; color: var(--muted); text-align: center; }
+.note { margin: 14px 0 6px; color: var(--muted); }
+.chart > svg { margin: 0 auto; }
+
+svg { display: block; max-width: 100%; height: auto; }
+svg text { font: 10px -apple-system, system-ui, sans-serif; }
+.ink { fill: var(--ink); }
+.muted { fill: var(--muted); }
+.grid { stroke: var(--grid); }
+.halo { stroke: var(--card); }
+.hit { fill: transparent; }
+.mark { cursor: pointer; }
+
+.r-high { fill: var(--risk-high); }
+.r-medium { fill: var(--risk-medium); }
+.r-low { fill: var(--risk-low); }
+.r-info { fill: var(--risk-info); }
+.b-all { fill: var(--band-all); }
+.b-lan { fill: var(--band-lan); }
+.b-loop { fill: var(--band-loop); }
+circle.mark:hover, circle.mark.sel { stroke: var(--ink); }
+
+.fresh { fill: var(--fresh); }
+.stale { fill: var(--stale); }
+.day { stroke: var(--mark); }
+g.mark:hover .hit, g.mark.sel .hit, g.fold:hover .hit { fill: var(--wash); }
+g.mark.sel circle { stroke: var(--ink); }
+
+.s0 { fill: var(--s0); } .s1 { fill: var(--s1); } .s2 { fill: var(--s2); } .s3 { fill: var(--s3); }
+.s4 { fill: var(--s4); } .s5 { fill: var(--s5); } .s6 { fill: var(--s6); } .s7 { fill: var(--s7); }
+.sx { fill: var(--other); }
+.wash { fill: var(--wash); }
+.on { fill: #ffffff; }
+.on-dark { fill: #0b0b0b; }
+rect.leaf { stroke: transparent; stroke-width: 2; }
+rect.leaf:hover, rect.leaf.sel { stroke: var(--ink); }
+
+.node { fill: var(--node); }
+.alert { fill: var(--risk-high); }
+.band { opacity: var(--band-opacity); }
+.band:hover { opacity: 0.85; }
+
+.arc.zoom { cursor: pointer; }
+.arc:hover { stroke: var(--ink); stroke-width: 1; }
+.hub { fill: transparent; }
+.center.zoom { cursor: pointer; }
+.center.zoom:hover .hub { fill: var(--wash); }
+
+.ridge { fill: var(--s0); fill-opacity: 0.45; }
+.ridge-line { stroke: var(--s0); }
+
+.branch { stroke: var(--grid); }
+.knot { fill: var(--card); stroke: var(--mark); }
+.knot.folded { fill: var(--mark); }
+.fold { cursor: pointer; }
+
+.wire { stroke: var(--other); stroke-opacity: 0.5; }
+.wire.ok { stroke: var(--ok); stroke-opacity: 0.8; }
+.wire.warn { stroke: var(--risk-medium); stroke-opacity: 0.95; }
+.wire:hover { stroke-opacity: 1; }
+.lighting .wire[data-from] { stroke-opacity: 0.1; }
+.lighting .wire.out { stroke: var(--s0); stroke-opacity: 1; }
+.lighting .wire.in { stroke: var(--s1); stroke-opacity: 1; }
+.lighting .peer text { fill: var(--muted); }
+.lighting .peer.lit text { fill: var(--ink); }
+
+#tip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 10;
+  max-width: 300px;
+  padding: 6px 9px;
+  border-radius: 7px;
+  background: var(--card);
+  border: 1px solid var(--edge);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  color: var(--ink);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: pre-line;
+  pointer-events: none;
+}
+#tip[hidden] { display: none; }

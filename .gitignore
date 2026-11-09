@@ -11,3 +11,6 @@ xcuserdata/
 *.xcuserstate
 __pycache__/
 *.py[cod]
+
+# A real scan of this Mac, for previewing charts. Never commit it.
+Resources/charts-dev/live.json

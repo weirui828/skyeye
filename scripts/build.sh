@@ -18,6 +18,13 @@ cp "$BIN/sky" "$BIN/skyeye-mcp" "$BIN/skyeye-logwriter" "$APP/Contents/MacOS/"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 cp Resources/Telescope.pdf "$APP/Contents/Resources/"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/"
+# The ports page's charts: one HTML page, its stylesheet and scripts, and the vendored D3.
+# The vendored file must be the release that was reviewed: its checksum is recorded beside it.
+(cd Resources/charts/vendor && shasum -a 256 -c SHA256SUMS >/dev/null) || {
+    echo "Resources/charts/vendor/d3.min.js does not match SHA256SUMS" >&2
+    exit 1
+}
+cp -R Resources/charts "$APP/Contents/Resources/charts"
 cp LICENSE "$APP/Contents/Resources/LICENSE"
 
 if [[ "$CONFIG" == "release" ]]; then

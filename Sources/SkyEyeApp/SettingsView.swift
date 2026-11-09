@@ -196,6 +196,12 @@ struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
+            Divider()
+            SettingsToggle(
+                title: "Ask whois registries who owns unknown addresses",
+                isOn: boolSetting(\.whoisLookups)
+            )
+            .help("The ports page names who each program talks to from a built-in table and reverse DNS. Turning this on also sends addresses those can't name to public registries such as ARIN and RIPE.")
         }
     }
 
