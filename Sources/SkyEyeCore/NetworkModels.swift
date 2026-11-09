@@ -196,11 +196,21 @@ public struct NetworkScan: Codable, Sendable {
     }
 
     /// JSON for the chart page: dates as milliseconds since 1970.
+    ///
+    /// The page gets only what its charts draw. Command lines can carry tokens and passwords, and they,
+    /// folders and executable paths have no business in a web view, however closed off it is.
     public func chartJSON() -> String {
+        var drawn = self
+        for i in drawn.programs.indices {
+            drawn.programs[i].command = ""
+            drawn.programs[i].folder = nil
+            drawn.programs[i].place = ""
+        }
+        for i in drawn.outgoing.indices { drawn.outgoing[i].path = "" }
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .millisecondsSince1970
         encoder.outputFormatting = [.sortedKeys]
-        return (try? encoder.encode(self)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
+        return (try? encoder.encode(drawn)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
     }
 }
 

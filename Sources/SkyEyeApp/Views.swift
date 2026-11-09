@@ -403,7 +403,7 @@ struct ServiceListView: View {
             footer
         }
         // The Ports button's count comes from the last scan: refresh it when the menu opens.
-        .onAppear { monitor.rescanIfStale() }
+        .onAppear { monitor.rescanInBackground() }
     }
 
     private var footer: some View {

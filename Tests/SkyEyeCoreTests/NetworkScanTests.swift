@@ -60,7 +60,6 @@ final class PortScanTests: XCTestCase {
         XCTAssertEqual(procs[44893]?.command, "next-server (v16.3.8)")
         XCTAssertEqual(procs[1799]?.seconds, 11 * 86_400 + 15 * 3600 + 12 * 60 + 24)
         XCTAssertEqual(PortScan.parseEtime("13:01"), 781)
-        XCTAssertEqual(PortScan.parseCwd("p44893\nfcwd\nn/Users/me/dev/petshop/frontend\n")[44893], "/Users/me/dev/petshop/frontend")
     }
 
     func testAWiderTwinWins() {
@@ -101,12 +100,22 @@ final class PortScanTests: XCTestCase {
             "vite"
         )
         XCTAssertEqual(PortScan.script(of: "node host/bin/cabby-host.mjs serve", process: "node"), "cabby-host")
-        XCTAssertEqual(PortScan.name(of: "/usr/libexec/rapportd", process: "rapportd", ports: []), "Continuity")
         XCTAssertEqual(
-            PortScan.name(of: "node x", process: "node", ports: [port(3000, "127.0.0.1", status: 200, title: "Pet Shop")]), "Pet Shop"
+            PortScan.name(of: "/usr/libexec/rapportd", executable: "/usr/libexec/rapportd", process: "rapportd", ports: []), "Continuity"
         )
         XCTAssertEqual(
-            PortScan.name(of: "node x", process: "node", ports: [port(3000, "127.0.0.1", status: 404, title: "Not Found")]), "x",
+            PortScan.name(
+                of: "node x", executable: "/opt/homebrew/bin/node", process: "node",
+                ports: [port(3000, "127.0.0.1", status: 200, title: "Pet Shop")]
+            ),
+            "Pet Shop"
+        )
+        XCTAssertEqual(
+            PortScan.name(
+                of: "node x", executable: "/opt/homebrew/bin/node", process: "node",
+                ports: [port(3000, "127.0.0.1", status: 404, title: "Not Found")]
+            ),
+            "x",
             "a title that says nothing falls back to the script"
         )
 
@@ -122,6 +131,46 @@ final class PortScanTests: XCTestCase {
         place = PortScan.place(of: "/", root: root, home: home)
         XCTAssertNil(place.project)
         XCTAssertEqual(place.place, "")
+    }
+
+    func testWhatAProgramIsGoesByItsFileNotItsArguments() {
+        // A listener can write anything in its own arguments. Calling itself a macOS daemon, or naming an app,
+        // doesn't make it one: it stays a server, with a server's risk and a server's probe.
+        XCTAssertEqual(PortScan.section(of: "/tmp/x/rapportd", process: "rapportd"), .servers)
+        XCTAssertEqual(PortScan.section(of: "", process: "listener"), .servers, "a file nobody could name hides nothing")
+        XCTAssertEqual(
+            PortScan.name(
+                of: "/usr/libexec/rapportd --root /Applications/Safari.app/Contents/Resources",
+                executable: "/tmp/x/rapportd", process: "rapportd", ports: []
+            ),
+            "rapportd", "not Continuity, and not Safari"
+        )
+        // Who started it goes by each parent's file too.
+        let procs: [Int32: PortScan.Proc] = [
+            10: PortScan.Proc(pid: 10, ppid: 9, seconds: 0, rssKb: 0, cpu: 0, command: "server"),
+            9: PortScan.Proc(
+                pid: 9, ppid: 1, seconds: 0, rssKb: 0, cpu: 0,
+                command: "/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal"
+            ),
+        ]
+        XCTAssertEqual(PortScan.startedBy(10, procs), "terminal", "the command line stands in when the file isn't known")
+        XCTAssertEqual(PortScan.startedBy(10, procs, paths: [9: "/tmp/x/dropper"]), "launchd")
+        XCTAssertEqual(PortScan.startedBy(10, procs, paths: [9: "/Applications/Ghostty.app/Contents/MacOS/ghostty"]), "terminal")
+        XCTAssertEqual(
+            PortScan.startedBy(10, procs, paths: [9: "/Users/me/.local/share/claude/versions/2.1.317"], names: [9: "claude"]),
+            "Claude session"
+        )
+    }
+
+    func testNamesFromOtherProgramsAreMadePlain() {
+        // A right-to-left override would make "Pay\u{202E}lortnoc" read as something else on screen.
+        XCTAssertEqual(PortScan.pageTitle("<title>Pay\u{202E}lortnoc\n   now</title>"), "Pay lortnoc now")
+        XCTAssertEqual(PortScan.plain("a\u{0007}b\tc\u{2028}d"), "a b c d")
+        XCTAssertNil(PortScan.pageTitle("<title> \n </title>"))
+        XCTAssertEqual(
+            PortScan.name(of: "x", executable: "/Applications/Safe\u{202E}App.app/Contents/MacOS/x", process: "x", ports: []),
+            "Safe App"
+        )
     }
 
     func testRisk() {
@@ -229,6 +278,15 @@ final class OutgoingTests: XCTestCase {
         )
         XCTAssertEqual(Outgoing.ownerByWhois("OrgName: Amazon Technologies Inc.\n").owner, "AWS")
         XCTAssertNil(Outgoing.ownerByWhois("").owner)
+    }
+
+    func testOnlyAddressesAreLookedUp() {
+        XCTAssertTrue(Outgoing.isAddress("17.1.2.3"))
+        XCTAssertTrue(Outgoing.isAddress("2606:4700::6810:922"))
+        // Anything else would reach a lookup tool as an option or a server to ask.
+        for other in ["", "-f", "@203.0.113.7", "+trace", "example.com", "1.2.3", "1.2.3.4 -x", "fe80::1%en0"] {
+            XCTAssertFalse(Outgoing.isAddress(other), other)
+        }
     }
 
     func testSignaturesBundlesAndNames() {
@@ -342,6 +400,18 @@ final class OutgoingTests: XCTestCase {
         )
         XCTAssertEqual(outside[0].flags.first, ConnectionFlag(.note, "Its file is no longer on disk: updated or deleted while it runs"))
         XCTAssertEqual(outside[0].flags[1], ConnectionFlag(.alert, "Shady Hosting connected in to a port you're listening on"))
+
+        // A program whose file SkyEye left unread says so, and is not called signed or unsigned.
+        let unread = Outgoing.buildTalkers(
+            links: [Outgoing.Link(pid: 9, process: "tool", local: "", ip: "142.251.46.69", port: 443, proto: .tcp)],
+            paths: [9: "/Users/me/Downloads/tool"], owners: ["142.251.46.69": Outgoing.Owned(owner: "Google")],
+            signatures: ["/Users/me/Downloads/tool": Outgoing.Signature(signer: "", isValid: true, unread: "your Downloads folder")],
+            listening: [:], history: Outgoing.History(), now: at(1)
+        )
+        XCTAssertNil(unread[0].signer)
+        XCTAssertEqual(
+            unread[0].flags.first, ConnectionFlag(.note, "Runs from your Downloads folder: SkyEye did not open it to check its signature")
+        )
     }
 }
 
@@ -363,6 +433,12 @@ private let nettop = [
     "",
 ].joined(separator: "\n")
 
+private let nettopNames: [Int32: String] = [1: "launchd", 44643: "Google Chrome Helper", 500: "python3.14", 1799: "postgres"]
+
+private func flows(_ text: String = nettop, names: [Int32: String] = nettopNames) -> [Traffic.Flow] {
+    Traffic.parseNettop(text) { names[$0] }
+}
+
 private func listener(
     _ pid: Int32, _ name: String, _ ports: [Int], section: ProgramSection = .servers, project: String? = nil, service: String? = nil
 ) -> ListeningProgram {
@@ -376,7 +452,7 @@ private func listener(
 
 final class TrafficTests: XCTestCase {
     func testNettopBecomesFlows() {
-        let flows = Traffic.parseNettop(nettop)
+        let flows = flows()
         // Sockets with no far end, listening or unconnected, are not flows.
         XCTAssertEqual(flows.map { "\($0.pid) \($0.proto) \($0.ip):\($0.port)" }, [
             "44643 tcp4 142.251.46.69:443",
@@ -388,11 +464,38 @@ final class TrafficTests: XCTestCase {
         ])
         XCTAssertEqual(flows[0].bytes, 3000)
         XCTAssertEqual(flows[1].localPort, 57085)
-        XCTAssertEqual(Traffic.parseNettop("nettop: unknown option\n"), [])
+        XCTAssertEqual(SkyEyeCoreTests.flows("nettop: unknown option\n"), [])
+    }
+
+    func testAProgramCannotPutItsTrafficUnderAnotherName() {
+        let header = "time,,interface,state,bytes_in,bytes_out,rx_dupe,rx_ooo,re-tx,rtt_avg,rcvsize,tx_win,tc_class,tc_mgt,cc_algo,P,C,R,W,arch,"
+        let chrome = "12:00:00.1,Google Chrome He.44643,,,10,10,0,0,0,,,,,,,,,,,,"
+        let socket = "12:00:00.2,tcp4 192.168.1.22:50000<->203.0.113.7:443,en0,Established,5,5,0,0,0,1 ms,1,1,RD,-,cubic,-,-,-,-,ch,"
+        func pids(_ lines: [String], _ names: [Int32: String]) -> [Int32] {
+            flows(([header] + lines).joined(separator: "\n") + "\n", names: names).map(\.pid)
+        }
+        let chromeOnly: [Int32: String] = [44643: "Google Chrome Helper"]
+
+        // A comma in a name shifts nettop's columns. The kernel knows the name, so the line is still its process.
+        let comma = "12:00:00.3,ev,il.777,,,5,5,0,0,0,,,,,,,,,,,,"
+        XCTAssertEqual(pids([chrome, socket, comma, socket], chromeOnly.merging([777: "ev,il"]) { a, _ in a }), [44643, 777])
+        // If the kernel can't vouch for the line, what follows is dropped, not counted as Chrome's.
+        XCTAssertEqual(pids([chrome, socket, comma, socket], chromeOnly), [44643])
+
+        // A name that reads like a socket line: with the kernel's word it is a process, and its socket is its own.
+        let disguised = "12:00:00.3,udp6 ::1.1<->::2.888,,,5,5,0,0,0,,,,,,,,,,,,"
+        XCTAssertEqual(pids([chrome, disguised, socket], chromeOnly.merging([888: "udp6 ::1.1<->::2"]) { a, _ in a }), [888])
+        // The same text from a real socket of Chrome's is a socket: no process 888 has that name.
+        XCTAssertEqual(pids([chrome, disguised], chromeOnly), [44643])
+
+        // A short name is not enough to claim a longer line, and a line that is neither ends the run.
+        XCTAssertEqual(pids([chrome, disguised, socket], chromeOnly.merging([888: "udp6"]) { a, _ in a }), [44643, 44643])
+        XCTAssertEqual(pids([chrome, "12:00:00.3,tcp4 a<->b.999,,,5,5,0,0,0,,,,,,,,,,,,", socket], chromeOnly), [])
+        XCTAssertEqual(pids([chrome, "garbage", socket], chromeOnly), [])
     }
 
     func testBytesGoToProgramsAndTheirPeers() {
-        let flows = Traffic.parseNettop(nettop)
+        let flows = flows()
         let programs = Traffic.programs(
             flows: flows, names: [44643: "Google Chrome", 500: "atlas.serve"],
             owners: ["142.251.46.69": Outgoing.Owned(owner: "Google", host: "sfo03s27-in-f5.1e100.net")]
@@ -409,7 +512,7 @@ final class TrafficTests: XCTestCase {
     }
 
     func testConnectionsInsideThisMacAreCheckedAgainstDeclaredDependencies() {
-        let flows = Traffic.parseNettop(nettop)
+        let flows = flows()
         let programs = [
             listener(1799, "PostgreSQL", [5432], service: "postgres"),
             listener(500, "atlas.serve", [8000], project: "atlas", service: "api"),
@@ -460,6 +563,10 @@ final class TrafficTests: XCTestCase {
         XCTAssertEqual(orphan.map(\.ppid), [0, 1])
         XCTAssertEqual(Traffic.displayName("/Applications/Zed.app/Contents/MacOS/zed --foreground"), "Zed")
         XCTAssertEqual(Traffic.displayName("/bin/zsh -c npm run dev"), "zsh")
+        XCTAssertEqual(
+            Traffic.displayName("helper /Applications/Safari.app/Contents/MacOS/Safari", executable: "/tmp/x/helper"), "helper",
+            "an app named in an argument is not the app"
+        )
     }
 
     func testRatesComeFromTheDifferenceBetweenSamples() {
@@ -512,16 +619,65 @@ final class NetworkScannerTests: XCTestCase {
     }
 
     func testStopOnlyEndsTheProcessThatWasScanned() throws {
-        let (fd, _) = try listenOnFreePort()
-        defer { close(fd) }
-        var mine = try XCTUnwrap(NetworkScanner().scanListening().programs.first { $0.pid == getpid() })
-        mine.stopPids = [getpid(), getppid(), 1]
-        XCTAssertEqual(PortScan.currentStopPids(mine), [getpid(), getppid()], "launchd is not the test runner's parent's wrapper")
-        mine.stopPids = [getpid(), 1]
-        XCTAssertEqual(PortScan.currentStopPids(mine), [getpid()], "a pid that is no longer the parent is left alone")
+        // A shell that runs sleep as its child: what Stop would see as a listener under a wrapper.
+        let shell = Process()
+        shell.executableURL = URL(fileURLWithPath: "/bin/sh")
+        shell.arguments = ["-c", "/bin/sleep 30; true"]
+        try shell.run()
+        defer { shell.terminate() }
+        var sleeper: Int32?
+        for _ in 0..<40 where sleeper == nil {
+            Thread.sleep(forTimeInterval: 0.05)
+            let procs = PortScan.parsePs(Command.run("/bin/ps", ["-axww", "-o", "pid=,ppid=,etime=,rss=,%cpu=,command="]).output)
+            sleeper = procs.values.first { $0.ppid == shell.processIdentifier }?.pid
+        }
+        let pid = try XCTUnwrap(sleeper)
+        defer { kill(pid, SIGTERM) }
+        let info = try XCTUnwrap(ProcessTable.info(pid))
+        var program = listener(pid, "sleeper", [1])
+        program.startedAt = Date(timeIntervalSince1970: Double(info.pbi_start_tvsec) + Double(info.pbi_start_tvusec) / 1_000_000)
+
+        // The wrapper is ended with it; this process is the wrapper's parent, and SkyEye never ends itself.
+        program.stopPids = [pid, shell.processIdentifier, getpid()]
+        XCTAssertEqual(PortScan.currentStopPids(program), [pid, shell.processIdentifier])
+        program.stopPids = [pid, 1]
+        XCTAssertEqual(PortScan.currentStopPids(program), [pid], "a pid that is not its parent is left alone")
+        program.stopPids = [1]
+        XCTAssertEqual(PortScan.currentStopPids(program), [], "never launchd")
+        program.stopPids = [getpid()]
+        XCTAssertEqual(PortScan.currentStopPids(program), [], "never SkyEye itself")
         // The same pid with another start time is another process.
-        mine.startedAt = mine.startedAt.addingTimeInterval(-3600)
-        XCTAssertEqual(PortScan.currentStopPids(mine), [])
+        program.stopPids = [pid]
+        program.startedAt = program.startedAt.addingTimeInterval(-3600)
+        XCTAssertEqual(PortScan.currentStopPids(program), [])
+    }
+
+    func testTheChartPageGetsNoCommandLinesOrPaths() {
+        var program = listener(7, "api", [8000])
+        program.command = "api --token=hunter2"
+        program.folder = "/Users/me/dev/secret-project"
+        program.place = "secret-project"
+        let talker = Talker(
+            name: "tool", section: .servers, path: "/Users/me/bin/tool", pids: [9], signer: nil, peers: [], count: 0,
+            flags: [], firstSeen: at(0), earlier: []
+        )
+        let json = NetworkScan(programs: [program], outgoing: [talker], firewall: true, scannedAt: at(1)).chartJSON()
+        for secret in ["hunter2", "secret-project", "/Users/me"] {
+            XCTAssertFalse(json.contains(secret), secret)
+        }
+        XCTAssertTrue(json.contains("\"name\":\"api\""))
+    }
+
+    func testFilesInProtectedFoldersAreLeftUnread() {
+        let home = "/Users/me"
+        XCTAssertEqual(NetworkScanner.protectedPlace(of: "/Users/me/Downloads/Tool.app", home: home), "your Downloads folder")
+        XCTAssertEqual(NetworkScanner.protectedPlace(of: "/Users/me/Desktop/x", home: home), "your Desktop folder")
+        XCTAssertEqual(NetworkScanner.protectedPlace(of: "/Users/me/Library/Mobile Documents/x/Tool", home: home), "a cloud storage folder")
+        XCTAssertEqual(NetworkScanner.protectedPlace(of: "/Volumes/Installer/Tool.app", home: home), "another disk or a disk image")
+        XCTAssertNil(NetworkScanner.protectedPlace(of: "/Users/me/dev/tool", home: home))
+        XCTAssertNil(NetworkScanner.protectedPlace(of: "/Users/me/Library/Application Support/x", home: home))
+        XCTAssertNil(NetworkScanner.protectedPlace(of: "/Applications/Safari.app", home: home))
+        XCTAssertNil(NetworkScanner.protectedPlace(of: "/Users/meow/Downloads/x", home: home))
     }
 
     /// Scans this Mac for real and writes the chart JSON. Run with

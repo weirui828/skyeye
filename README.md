@@ -183,7 +183,7 @@ In the tree, select a branch to fold it.
 
 The circle of connections compares each connection with the dependencies that you set.
 A connection between two SkyEye services without a dependency has a different color.
-Use the buttons on a row to open the page, open the folder, or stop the program.
+Use the buttons on a row to open the page, show the folder in Finder, or stop the program.
 For a service that SkyEye started, **Stop** stops the service.
 
 The **Outgoing** section lists programs with connections to other computers.
@@ -192,19 +192,32 @@ It also flags a connection from outside your network to a port that you listen o
 
 ### What the scan does
 
-SkyEye scans once after it starts, and when you open the menu or the page.
+SkyEye does not scan until you open the page for the first time.
+After that, it also scans once after it starts and when you open the menu.
 While the page is open, it scans every 30 seconds and samples traffic every 10 seconds.
-The scan runs `lsof`, `ps`, `nettop`, `ifconfig`, `codesign`, `dig`, and `socketfilterfw` with your user permissions.
+The scan runs `lsof`, `ps`, `nettop`, `ifconfig`, `codesign`, `dscacheutil`, and `socketfilterfw` with your user permissions.
 Byte counts cover connections that are open at the time of the scan.
 
-- SkyEye sends one HTTP request to each listening port to learn what the port is.
+- SkyEye sends up to two HTTP requests to each listening port to learn what the port is.
   It skips macOS services and databases. These requests can appear in your server logs.
 - SkyEye names the owner of an address from a built-in table, then from reverse DNS.
+  Reverse DNS lookups use the DNS settings of your Mac.
 - SkyEye does not contact whois registries by default.
   To allow this, enable **Settings → Advanced → Ask whois registries who owns unknown addresses**.
+- SkyEye does not open a program to check its signature if macOS would ask you for access first.
+  This applies to the Desktop, Documents, and Downloads folders, cloud storage folders, and other disks.
+  The row shows where the program runs from.
+
+SkyEye decides what a program is from the file that the program runs.
+It does not trust the arguments of a program, because a program sets its own arguments.
+Text from other programs, such as page titles, appears as plain text.
+
+**Folder** shows the folder in Finder. It does not open or start anything.
+**Stop** checks that each process is still the one that the scan found. Then it sends a stop signal.
 
 The charts use a web view that loads only files inside the app.
 The chart page cannot load anything from the network.
+The chart page does not receive command lines, folders, or file paths.
 
 ## Read resource use
 
@@ -336,7 +349,8 @@ Cleanup resumes when SkyEye opens again.
 These locations are outside this repository.
 Git does not include them when you push the repository.
 Configuration files can contain secrets in environment variables.
-Do not attach configuration files or raw logs to public issues.
+`network.json` lists programs on your Mac and the companies that they connect to.
+Do not attach configuration files, `network.json`, or raw logs to public issues.
 
 ## Test and package
 

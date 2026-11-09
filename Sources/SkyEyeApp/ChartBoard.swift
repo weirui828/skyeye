@@ -8,7 +8,8 @@ import WebKit
 /// it can load nothing but the app's own chart files, runs no inline script, and can't navigate anywhere else.
 struct ChartBoard: NSViewRepresentable {
     static let scheme = "skyeye-charts"
-    static let policy = "default-src 'none'; script-src 'self' skyeye-charts:; style-src 'self' skyeye-charts:; img-src 'self' data:"
+    static let policy = "default-src 'none'; script-src 'self' skyeye-charts:; style-src 'self' skyeye-charts:; "
+        + "img-src 'self' data:; base-uri 'none'; form-action 'none'"
 
     /// The chart files inside the app bundle, or nil when this build doesn't carry them (`swift run`).
     static let directory: URL? = {

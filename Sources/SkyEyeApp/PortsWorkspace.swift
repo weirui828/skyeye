@@ -89,9 +89,19 @@ final class NetworkMonitor: ObservableObject {
         rescan()
     }
 
+    private static let openedKey = "portsPageOpened"
+
+    /// A scan nobody asked for, to keep the menu's count current. A scan asks every listening port what it is,
+    /// so SkyEye does this on its own only once the user has opened the page and so has seen what it does.
+    func rescanInBackground() {
+        guard UserDefaults.standard.bool(forKey: Self.openedKey) else { return }
+        rescanIfStale()
+    }
+
     /// Keeps the page current while its window is open: a full scan every `interval`, and a traffic sample every `sampling`.
     func startPolling(every interval: TimeInterval = 30, sampling: TimeInterval = 10) {
         stopPolling()
+        UserDefaults.standard.set(true, forKey: Self.openedKey)
         // Samples from before the window was closed would draw as one long flat stretch: start the chart over.
         if let last = recorder.history.times.last, Date().timeIntervalSince(last) > 60 {
             recorder = Traffic.Recorder()
@@ -632,7 +642,9 @@ private struct ProgramRow: View {
     private var actions: some View {
         if isConfirming {
             HStack(spacing: 8) {
-                Text(program.managed && program.service != nil
+                // Verbatim: a program's name can be a page title, and a literal here would be read as Markdown,
+                // so a title could put a link into the question.
+                Text(verbatim: program.managed && program.service != nil
                      ? "Stop the service \(program.service!)?"
                      : "Stop \(program.name)? Ends pid \(program.stopPids.map(String.init).joined(separator: ", ")).")
                     .font(.caption).foregroundStyle(.orange)
@@ -651,7 +663,9 @@ private struct ProgramRow: View {
                             .help(url.absoluteString)
                     }
                     if let folder {
-                        Button { NSWorkspace.shared.open(URL(fileURLWithPath: folder, isDirectory: true)) } label: {
+                        // Shown in Finder, never opened: a program can make an app bundle its working directory,
+                        // and opening that would launch it.
+                        Button { NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folder) } label: {
                             Label("Folder", systemImage: "folder")
                         }
                         .help(folder)
@@ -679,7 +693,7 @@ private struct TalkerRow: View {
 
     private var signature: (text: String, color: Color) {
         switch talker.signer {
-        case nil: ("signature not checked yet", .secondary)
+        case nil: ("signature not checked", .secondary)
         case "unsigned"?: ("not signed", .red)
         case "ad-hoc"?: ("ad-hoc signed", .orange)
         case Outgoing.missingFile?: ("file no longer on disk", .orange)

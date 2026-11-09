@@ -98,20 +98,6 @@ public enum PortScan {
         return days * 86_400 + parts[0] * 3600 + parts[1] * 60 + parts[2]
     }
 
-    /// `lsof -a -d cwd -Fpn -p 1,2,3`: "p123", "fcwd", "n/Users/me/dev/app".
-    public static func parseCwd(_ text: String) -> [Int32: String] {
-        var cwd: [Int32: String] = [:]
-        var pid: Int32?
-        for line in text.split(separator: "\n") {
-            if line.first == "p" {
-                pid = Int32(line.dropFirst())
-            } else if line.first == "n", let pid {
-                cwd[pid] = String(line.dropFirst())
-            }
-        }
-        return cwd
-    }
-
     public static func exposure(of address: String) -> Exposure {
         if address == "*" || address == "0.0.0.0" || address == "[::]" { return .all }
         if address.hasPrefix("127.") || address == "[::1]" || address == "localhost" { return .loopback }
@@ -132,16 +118,27 @@ public enum PortScan {
 
     /// The page's `<title>`, when the body has one.
     public static func pageTitle(_ body: String) -> String? {
-        guard let raw = titleTag.first(body)?[1]?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
-            return nil
-        }
-        return raw
+        guard let raw = titleTag.first(body)?[1] else { return nil }
+        let title = plain(raw
             .replacingOccurrences(of: "&amp;", with: "&")
             .replacingOccurrences(of: "&lt;", with: "<")
             .replacingOccurrences(of: "&gt;", with: ">")
             .replacingOccurrences(of: "&#39;", with: "'")
             .replacingOccurrences(of: "&apos;", with: "'")
-            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&quot;", with: "\""))
+        return title.isEmpty ? nil : title
+    }
+
+    /// A name as one line of plain text. Titles and file names come from other programs: control characters and
+    /// the invisible ones that reorder text (so a name can read as something else) are dropped, runs of space folded.
+    public static func plain(_ text: String) -> String {
+        let kept = text.unicodeScalars.map { scalar -> Character in
+            switch scalar.properties.generalCategory {
+            case .control, .format, .lineSeparator, .paragraphSeparator, .spaceSeparator: " "
+            default: Character(scalar)
+            }
+        }
+        return String(kept).split(separator: " ").joined(separator: " ")
     }
 
     /// True when the command line asks for a debugger on `port`.
@@ -167,6 +164,8 @@ public enum PortScan {
     ]
     /// Command-line agents and editors: their ports belong to an open session, never Stop them.
     private static let tools: Set<String> = ["claude", "codex", "agy", "zed", "gemini", "cursor-agent", "ollama"]
+    /// Names that only mean something for macOS's own copy of the program.
+    private static let systemNames: Set<String> = ["rapportd", "ControlCenter"]
 
     private static let databaseProcesses: Set<String> = [
         "postgres", "mysqld", "mariadbd", "redis-server", "mongod", "clickhouse", "memcached",
@@ -184,16 +183,20 @@ public enum PortScan {
 
     private static let appBundle = Pattern(#"/([^/]+)\.app/Contents/"#)
 
-    public static func app(of command: String) -> String? {
-        guard let name = appBundle.first(command)?[1] else { return nil }
+    /// The app a path is inside, if any.
+    public static func app(of path: String) -> String? {
+        guard let name = appBundle.first(path)?[1] else { return nil }
         return name == "claude" ? "Claude Code" : name
     }
 
     private static let systemPath = Pattern(#"^/(System|usr/libexec|usr/sbin|sbin)/"#)
 
-    public static func section(of command: String, process: String) -> ProgramSection {
-        if systemPath.test(command) { return .system }
-        if app(of: command) != nil || tools.contains(process) { return .apps }
+    /// `path` is the executable the kernel reports (`ProcessTable.executable`), never the command line: a process
+    /// writes its own arguments, and one that called itself `/usr/libexec/…` would pass for part of macOS.
+    /// Pass "" when the path isn't known: the program is then treated as a server, which hides nothing.
+    public static func section(of path: String, process: String) -> ProgramSection {
+        if systemPath.test(path) { return .system }
+        if app(of: path) != nil || tools.contains(process) { return .apps }
         return .servers
     }
 
@@ -220,14 +223,15 @@ public enum PortScan {
         #"^(error|not found|40\d\b.*|index of\b.*|untitled|document|home|browser|loading\b.*|welcome)$"#, .caseInsensitive
     )
 
-    public static func name(of command: String, process: String, ports: [ListeningPort]) -> String {
+    /// `executable` decides what kind of program this is; `command` only names the script an interpreter runs.
+    public static func name(of command: String, executable: String, process: String, ports: [ListeningPort]) -> String {
+        let section = section(of: executable, process: process)
         // An app's own name beats whatever page its helper serves.
-        if section(of: command, process: process) == .servers,
-           let title = ports.compactMap(\.title).first(where: { !genericTitle.test($0) }) {
+        if section == .servers, let title = ports.compactMap(\.title).first(where: { !genericTitle.test($0) }) {
             return title
         }
-        if let known = friendly[process] { return known }
-        return app(of: command) ?? script(of: command, process: process)
+        if let known = friendly[process], section == .system || !systemNames.contains(process) { return known }
+        return plain(app(of: executable) ?? script(of: command, process: process))
     }
 
     // MARK: Who started it
@@ -240,15 +244,21 @@ public enum PortScan {
         #"(^|/)(sh|bash|zsh|dash) -c |(^|/)(npm|pnpm|yarn|npx|bunx|uv|poetry|pipenv|turbo|nodemon|concurrently)(\s|$)|(^|/)bun run |node_modules/\.bin/"#
     )
 
-    public static func startedBy(_ pid: Int32, _ procs: [Int32: Proc]) -> String {
+    /// `paths` and `names` hold each ancestor's executable and kernel name, where they are known: what a parent
+    /// is goes by those, not by the arguments it gave itself.
+    public static func startedBy(
+        _ pid: Int32, _ procs: [Int32: Proc], paths: [Int32: String] = [:], names: [Int32: String] = [:]
+    ) -> String {
         var at = procs[pid]?.ppid
         for _ in 0..<8 {
             guard let parent = at else { break }
             if parent <= 1 { return "launchd" }
             guard let p = procs[parent] else { break }
-            if claudeSession.test(p.command) { return "Claude session" }
-            if terminals.test(p.command) { return "terminal" }
-            if let app = app(of: p.command) { return app }
+            let what = paths[parent] ?? p.command
+            // Claude Code's own binary is a file named by its version; the kernel still calls the process claude.
+            if claudeSession.test(what) || names[parent] == "claude" { return "Claude session" }
+            if terminals.test(what) { return "terminal" }
+            if let app = app(of: what) { return plain(app) }
             at = p.ppid
         }
         return "unknown"
@@ -376,24 +386,20 @@ public enum PortScan {
 
     /// The pids Stop may end right now. A scan can be half a minute old, and a pid can be handed to another
     /// process in that time: the listener must still be the process that was scanned, and each wrapper still its parent.
+    /// It never names launchd or SkyEye itself, whatever the scan said.
     public static func currentStopPids(_ program: ListeningProgram) -> [Int32] {
-        guard let listener = program.stopPids.first, let info = processInfo(listener) else { return [] }
+        func mayStop(_ pid: Int32) -> Bool { pid > 1 && pid != getpid() }
+        guard let listener = program.stopPids.first, mayStop(listener), let info = ProcessTable.info(listener) else { return [] }
         let started = Date(timeIntervalSince1970: Double(info.pbi_start_tvsec) + Double(info.pbi_start_tvusec) / 1_000_000)
         guard abs(started.timeIntervalSince(program.startedAt)) < 5 else { return [] }
         var pids = [listener]
         var parent = Int32(info.pbi_ppid)
         for pid in program.stopPids.dropFirst() {
-            guard pid == parent, let next = processInfo(pid) else { break }
+            guard pid == parent, mayStop(pid), let next = ProcessTable.info(pid) else { break }
             pids.append(pid)
             parent = Int32(next.pbi_ppid)
         }
         return pids
-    }
-
-    private static func processInfo(_ pid: Int32) -> proc_bsdinfo? {
-        var info = proc_bsdinfo()
-        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
-        return proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size ? info : nil
     }
 
     private static func trimEnd(_ text: String) -> String {

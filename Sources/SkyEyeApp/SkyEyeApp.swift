@@ -98,7 +98,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             PortsWindowController.shared.show(manager: manager, monitor: monitor)
         } else {
             // One scan once things have settled, so the menu's Ports button knows whether anything needs a look.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [monitor] in monitor.rescanIfStale() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [monitor] in monitor.rescanInBackground() }
         }
     }
 

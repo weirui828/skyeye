@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /// Connections to other machines: which program talks to whom, who owns each address,
@@ -39,10 +40,14 @@ public enum Outgoing {
     public struct Signature: Equatable, Sendable {
         public var signer: String
         public var isValid: Bool
+        /// Where the program runs from, when SkyEye left its file unread: opening a file in a folder macOS
+        /// protects would make macOS ask the user for access on SkyEye's behalf.
+        public var unread: String?
 
-        public init(signer: String, isValid: Bool) {
+        public init(signer: String, isValid: Bool, unread: String? = nil) {
             self.signer = signer
             self.isValid = isValid
+            self.unread = unread
         }
     }
 
@@ -99,22 +104,18 @@ public enum Outgoing {
         return links
     }
 
-    /// `lsof -a -d txt -Fpn -p 1,2`: the first txt of each pid is its executable.
-    public static func parseExecutables(_ text: String) -> [Int32: String] {
-        var paths: [Int32: String] = [:]
-        var pid: Int32?
-        for line in text.split(separator: "\n") {
-            if line.first == "p" {
-                pid = Int32(line.dropFirst())
-            } else if line.first == "n", let pid, paths[pid] == nil {
-                paths[pid] = String(line.dropFirst())
-            }
-        }
-        return paths
-    }
-
     public static func isLoopback(_ ip: String) -> Bool {
         ip.hasPrefix("127.") || ip == "::1"
+    }
+
+    /// True for a numeric IPv4 or IPv6 address and nothing else. Addresses are handed to lookup tools as
+    /// arguments, so anything that isn't one never gets that far.
+    public static func isAddress(_ ip: String) -> Bool {
+        // inet_pton alone would let a scope through ("fe80::1%en0"): digits, colons and dots only.
+        guard ip.allSatisfy({ $0.isASCII && ($0.isHexDigit || $0 == ":" || $0 == ".") }) else { return false }
+        var v4 = in_addr()
+        var v6 = in6_addr()
+        return inet_pton(AF_INET, ip, &v4) == 1 || inet_pton(AF_INET6, ip, &v6) == 1
     }
 
     private static let privateV4 = Pattern(#"^(10\.|192\.168\.|169\.254\.)"#)
@@ -356,7 +357,9 @@ public enum Outgoing {
             let seen = history.programs[name]
             var flags: [ConnectionFlag] = []
 
-            if signature?.signer == "unsigned" {
+            if let place = signature?.unread {
+                flags.append(ConnectionFlag(.note, "Runs from \(place): SkyEye did not open it to check its signature"))
+            } else if signature?.signer == "unsigned" {
                 flags.append(ConnectionFlag(.alert, "Not code-signed"))
             } else if let signature, !signature.isValid {
                 flags.append(ConnectionFlag(.alert, "Signature doesn't verify: the program changed after it was signed"))
@@ -404,7 +407,7 @@ public enum Outgoing {
 
             talkers.append(Talker(
                 name: name, section: section, path: group.path, pids: group.pids.sorted(),
-                signer: signature?.signer, peers: list, count: group.links.count, flags: flags,
+                signer: signature?.unread == nil ? signature?.signer : nil, peers: list, count: group.links.count, flags: flags,
                 firstSeen: seen?.first ?? now, earlier: earlier
             ))
         }

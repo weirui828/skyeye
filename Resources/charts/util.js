@@ -16,7 +16,9 @@ export const OWNER_SLOT = {
   Google: 0, 'Google Cloud': 0, Anthropic: 1, Microsoft: 2, Cloudflare: 3,
   GitHub: 4, AWS: 5, 'AWS CloudFront': 5, Apple: 6, Meta: 7,
 }
-export const ownerClass = owner => (OWNER_SLOT[owner] === undefined ? 'sx' : `s${OWNER_SLOT[owner]}`)
+// An owner's name comes from DNS or a registry: it is looked up as its own key only, so a name such as
+// "constructor" finds nothing rather than something every object inherits.
+export const ownerClass = owner => (Object.hasOwn(OWNER_SLOT, owner) ? `s${OWNER_SLOT[owner]}` : 'sx')
 
 export function esc(text) {
   return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')

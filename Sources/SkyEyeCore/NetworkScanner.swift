@@ -42,6 +42,8 @@ public final class NetworkScanner: @unchecked Sendable {
 
     private static let lookupsPerScan = 8
     private static let signaturesPerScan = 6
+    /// A program can open ports faster than they can be asked what they are: the rest wait for the next scan.
+    private static let probesPerScan = 48
     private static let ownerTTL: TimeInterval = 30 * PortScan.day
     private static let maxOwners = 2000
     /// Folders macOS asks permission for; looking inside them would raise a prompt.
@@ -86,26 +88,42 @@ public final class NetworkScanner: @unchecked Sendable {
         self.services = services
         let state = outputs[2].lowercased()
         let firewall: Bool? = state.contains("enabled") ? true : state.contains("disabled") ? false : nil
-        let cwds = listening.isEmpty ? [:] : PortScan.parseCwd(Command.run(
-            "/usr/sbin/lsof", ["-a", "-d", "cwd", "-Fpn", "-p", listening.map { String($0.pid) }.joined(separator: ",")]
-        ).output)
+
+        // What each listener and each process above it really is: the file it runs, from the kernel.
+        // Its command line is its own to write, so that only ever names a script.
+        var paths: [Int32: String] = [:]
+        var kernelNames: [Int32: String] = [:]
+        for listener in listening {
+            var at: Int32? = listener.pid
+            for _ in 0..<24 {
+                guard let pid = at, pid > 1, paths[pid] == nil, let path = ProcessTable.executable(pid) else { break }
+                paths[pid] = path
+                kernelNames[pid] = ProcessTable.name(pid)
+                at = procs[pid]?.ppid
+            }
+        }
+        let names = listening.map { kernelNames[$0.pid] ?? $0.process }
+        let sections = listening.enumerated().map { i, listener in
+            PortScan.section(of: paths[listener.pid] ?? "", process: names[i])
+        }
 
         var ports = listening.map { $0.ports.map { ListeningPort(port: $0.port, address: $0.address) } }
         var pending: [(listener: Int, port: Int, key: String, command: String)] = []
         for (i, listener) in listening.enumerated() {
-            let command = procs[listener.pid]?.command ?? listener.process
-            let isSystem = PortScan.section(of: command, process: listener.process) == .system
+            let command = procs[listener.pid]?.command ?? names[i]
             for (j, port) in ports[i].enumerated() {
                 let key = "\(listener.pid):\(port.port)"
                 if let known = probed[key] {
                     ports[i][j].apply(known)
-                } else if !isSystem, !PortScan.isDatabasePort(port.port, process: listener.process) {
+                } else if sections[i] != .system, !PortScan.isDatabasePort(port.port, process: names[i]) {
                     // A database speaks its own protocol: an HTTP request only fills its log.
                     pending.append((i, j, key, command))
                 }
             }
         }
-        let jobs = pending
+        // The servers you started first, then app helpers.
+        let jobs = Array(pending.filter { sections[$0.listener] == .servers }.prefix(Self.probesPerScan))
+            + pending.filter { sections[$0.listener] != .servers }.prefix(Self.probesPerScan / 2)
         let targets = jobs.map { ports[$0.listener][$0.port] }
         let answers = Self.parallel(jobs.count) { [prober] in Self.probe(targets[$0], command: jobs[$0].command, with: prober) }
         for (job, answer) in zip(jobs, answers) {
@@ -119,20 +137,22 @@ public final class NetworkScanner: @unchecked Sendable {
         let managed = Dictionary(services.compactMap { s in s.pid.map { ($0, s.name) } }, uniquingKeysWith: { first, _ in first })
         let programs = listening.enumerated().map { i, listener -> ListeningProgram in
             let proc = procs[listener.pid]
-            let command = proc?.command ?? listener.process
-            let section = PortScan.section(of: command, process: listener.process)
-            let name = PortScan.name(of: command, process: listener.process, ports: ports[i])
-            let assessment = PortScan.assess(name: name, process: listener.process, section: section, ports: ports[i])
-            let folder = cwds[listener.pid]
+            let process = names[i]
+            let command = proc?.command ?? process
+            let section = sections[i]
+            let name = PortScan.name(of: command, executable: paths[listener.pid] ?? "", process: process, ports: ports[i])
+            let assessment = PortScan.assess(name: name, process: process, section: section, ports: ports[i])
+            let folder = ProcessTable.workingDirectory(listener.pid)
             let place = PortScan.place(of: folder, root: folder.map(workspaceRoot) ?? "", home: home)
             let ours = PortScan.ancestor(of: listener.pid, in: managed, procs)
             // A port SkyEye watches but didn't start: a monitor-only service, or one started outside SkyEye.
             let watched = services.first { s in s.pid == nil && ports[i].contains { $0.port == s.port } }?.name
             return ListeningProgram(
-                pid: listener.pid, name: name, process: listener.process, command: String(command.prefix(300)),
+                pid: listener.pid, name: name, process: process, command: String(command.prefix(300)),
                 ports: ports[i], exposure: assessment.exposure, section: section, kind: assessment.kind,
                 risk: assessment.risk, reasons: assessment.reasons, project: place.project, place: place.place,
-                folder: folder, startedBy: ours != nil ? "SkyEye" : PortScan.startedBy(listener.pid, procs),
+                folder: folder,
+                startedBy: ours != nil ? "SkyEye" : PortScan.startedBy(listener.pid, procs, paths: paths, names: kernelNames),
                 startedAt: now.addingTimeInterval(-Double(proc?.seconds ?? 0)), rssKb: proc?.rssKb ?? 0,
                 cpu: proc?.cpu ?? 0, stopPids: PortScan.stopPids(listener.pid, procs),
                 service: ours ?? watched, managed: ours != nil
@@ -140,7 +160,7 @@ public final class NetworkScanner: @unchecked Sendable {
         }
         return ListeningScan(
             programs: programs.sorted(by: PortScan.byRisk), firewall: firewall, scannedAt: now,
-            tree: Traffic.tree(programs: programs, procs: procs)
+            tree: Traffic.tree(programs: programs, procs: procs, paths: paths)
         )
     }
 
@@ -189,12 +209,18 @@ public final class NetworkScanner: @unchecked Sendable {
             ("/sbin/ifconfig", []),
         ]
         let outputs = Self.parallel(commands.count) { Command.run(commands[$0].0, commands[$0].1).output }
-        let links = Outgoing.parseLinks(outputs[0], proto: .tcp) + Outgoing.parseLinks(outputs[1], proto: .udp)
+        var links = Outgoing.parseLinks(outputs[0], proto: .tcp) + Outgoing.parseLinks(outputs[1], proto: .udp)
         let lan = Outgoing.localPrefixes(outputs[2])
         self.lan = lan
         guard !links.isEmpty else { return [] }
-        let pids = Set(links.map(\.pid)).sorted().map(String.init).joined(separator: ",")
-        let paths = Outgoing.parseExecutables(Command.run("/usr/sbin/lsof", ["-a", "-d", "txt", "-Fpn", "-p", pids]).output)
+        // Each program's file and name from the kernel: exact, where lsof escapes what it prints.
+        var paths: [Int32: String] = [:]
+        var names: [Int32: String] = [:]
+        for pid in Set(links.map(\.pid)) {
+            paths[pid] = ProcessTable.executable(pid)
+            names[pid] = ProcessTable.name(pid)
+        }
+        for i in links.indices { links[i].process = names[links[i].pid] ?? links[i].process }
 
         // Owners: the table answers at once; a few others are looked up per scan.
         var changed = false
@@ -226,7 +252,7 @@ public final class NetworkScanner: @unchecked Sendable {
 
         let unchecked = Set(paths.values.map(Outgoing.bundle)).filter { $0.hasPrefix("/") && signatures[$0] == nil }
         let bundles = Array(unchecked.sorted().prefix(Self.signaturesPerScan))
-        let checked = Self.parallel(bundles.count) { Self.checkSignature(bundles[$0]) }
+        let checked = Self.parallel(bundles.count) { [home] in Self.checkSignature(bundles[$0], home: home) }
         for (bundle, signature) in zip(bundles, checked) { signatures[bundle] = signature }
 
         let talkers = Outgoing.buildTalkers(
@@ -251,8 +277,10 @@ public final class NetworkScanner: @unchecked Sendable {
     public func scanTraffic(programs: [ListeningProgram], talkers: [Talker]) -> TrafficScan {
         // SkyEye's own probes and health checks are not something the user's programs did.
         let own = getpid()
-        let flows = Traffic.parseNettop(Command.run("/usr/bin/nettop", ["-L", "1", "-x", "-n"], timeout: 10).output)
-            .filter { $0.pid != own }
+        let flows = Traffic.parseNettop(
+            Command.run("/usr/bin/nettop", ["-L", "1", "-x", "-n"], timeout: 10).output, kernelName: ProcessTable.name
+        )
+        .filter { $0.pid != own }
         let labels = Traffic.labels(for: programs)
         let listeners = Dictionary(programs.map { ($0.pid, $0) }, uniquingKeysWith: { first, _ in first })
         let managed = Dictionary(services.compactMap { s in s.pid.map { ($0, s.name) } }, uniquingKeysWith: { first, _ in first })
@@ -266,8 +294,10 @@ public final class NetworkScanner: @unchecked Sendable {
         for pid in Set(flows.map(\.pid)) where names[pid] == nil {
             if let program = PortScan.ancestor(of: pid, in: listeners, procs), let label = labels[program.pid] {
                 names[pid] = label
-            } else if let command = procs[pid]?.command {
-                names[pid] = Outgoing.talkerName(process: Traffic.displayName(command), path: command)
+            } else if let path = ProcessTable.executable(pid) {
+                // Named from the file it runs, like the outgoing list: its arguments could say anything.
+                let command = procs[pid]?.command ?? path
+                names[pid] = Outgoing.talkerName(process: Traffic.displayName(command, executable: path), path: path)
             }
         }
 
@@ -282,17 +312,14 @@ public final class NetworkScanner: @unchecked Sendable {
             if let program = PortScan.ancestor(of: pid, in: listeners, procs), let label = labels[program.pid] {
                 return Traffic.Client(id: label, group: Traffic.group(of: program), service: program.service)
             }
-            guard let command = procs[pid]?.command else { return nil }
+            guard let name = names[pid] else { return nil }
             let group: String
-            switch PortScan.section(of: command, process: "") {
+            switch PortScan.section(of: ProcessTable.executable(pid) ?? "", process: "") {
             case .apps: group = "Apps"
             case .system: group = "macOS"
             case .servers: group = "Other"
             }
-            return Traffic.Client(
-                id: Outgoing.talkerName(process: Traffic.displayName(command), path: command), group: group,
-                service: PortScan.ancestor(of: pid, in: managed, procs)
-            )
+            return Traffic.Client(id: name, group: group, service: PortScan.ancestor(of: pid, in: managed, procs))
         }
         // Traffic over time is traffic with other machines, like the rest of the tab: loopback is left out.
         for flow in flows where !Outgoing.isLoopback(flow.ip) && flow.bytes > 0 {
@@ -314,10 +341,14 @@ public final class NetworkScanner: @unchecked Sendable {
 
     private static let hostname = Pattern(#"^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)+\.?$"#)
 
+    /// `ip` goes to the lookup tools as an argument: callers pass only what `Outgoing.isAddress` accepts.
     private static func lookUp(_ ip: String, whois: Bool) -> Outgoing.Owned {
-        let answer = Command.run("/usr/bin/dig", ["+short", "+time=1", "+tries=1", "-x", ip], timeout: 4).output
-        let host = answer.split(separator: "\n").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
-        // dig prints its errors where the answer goes: only a name counts.
+        guard Outgoing.isAddress(ip) else { return Outgoing.Owned(owner: Outgoing.unknownOwner) }
+        // The system resolver, not a DNS server asked directly: it follows the Mac's DNS settings,
+        // so a lookup goes wherever the user's other lookups go (encrypted DNS, a VPN's resolver).
+        let answer = Command.run("/usr/bin/dscacheutil", ["-q", "host", "-a", "ip_address", ip], timeout: 4).output
+        let host = answer.split(separator: "\n").first { $0.hasPrefix("name: ") }
+            .map { $0.dropFirst(6).trimmingCharacters(in: .whitespaces) } ?? ""
         if hostname.test(host), let owner = Outgoing.ownerByHost(host) {
             return Outgoing.Owned(owner: owner, host: host.hasSuffix(".") ? String(host.dropLast()) : host)
         }
@@ -329,7 +360,26 @@ public final class NetworkScanner: @unchecked Sendable {
         return Outgoing.Owned(owner: record.owner ?? Outgoing.unknownOwner)
     }
 
-    private static func checkSignature(_ bundle: String) -> Outgoing.Signature {
+    /// Where `path` is, when it is somewhere macOS asks the user before an app may read it. SkyEye scans in the
+    /// background: a permission prompt out of nowhere is not something a scan should cause.
+    static func protectedPlace(of path: String, home: String) -> String? {
+        if path.hasPrefix("/Volumes/") { return "another disk or a disk image" }
+        guard path.hasPrefix(home + "/") else { return nil }
+        let parts = path.dropFirst(home.count + 1).split(separator: "/", maxSplits: 2).map(String.init)
+        switch parts.first {
+        case "Desktop", "Documents", "Downloads":
+            return "your \(parts[0]) folder"
+        case "Library" where parts.count > 1 && ["Mobile Documents", "CloudStorage"].contains(parts[1]):
+            return "a cloud storage folder"
+        default:
+            return nil
+        }
+    }
+
+    private static func checkSignature(_ bundle: String, home: String) -> Outgoing.Signature {
+        if let place = protectedPlace(of: bundle, home: home) {
+            return Outgoing.Signature(signer: "", isValid: true, unread: place)
+        }
         // An app updated while it runs leaves its old executable's path empty: that is not a broken signature.
         guard FileManager.default.fileExists(atPath: bundle) else {
             return Outgoing.Signature(signer: Outgoing.missingFile, isValid: true)

@@ -121,41 +121,69 @@ public enum Traffic {
         }
     }
 
-    private static let protocols: Set<Substring> = ["tcp4", "tcp6", "udp4", "udp6"]
+    private static let processLine = Pattern(#"^[^,]*,(.*)\.(\d+),,,"#)
+    private static let socketLine = Pattern(#"^[^,]*,(tcp|udp)([46]) ([^ ,]+)<->([^ ,]+),"#)
+
+    private enum Endpoint {
+        /// "*:*", or a listening socket's "*:8080".
+        case any
+        case address(ip: String, port: Int)
+        /// Not something nettop prints for a socket.
+        case invalid
+    }
 
     /// `nettop -L 1 -x -n`: a header, then for each process a "name.pid" line followed by its sockets,
-    /// "tcp4 10.0.0.2:5123<->17.1.2.3:443,en0,Established,bytes_in,bytes_out,…". Sockets with no remote end are skipped.
-    public static func parseNettop(_ text: String) -> [Flow] {
+    /// "tcp4 10.0.0.2:5123<->17.1.2.3:443,en0,Established,bytes_in,bytes_out,…". Sockets with no far end are skipped.
+    ///
+    /// A program picks its own name, and could pick one with a comma in it or one that reads like a socket line,
+    /// so that its sockets are counted under the program listed before it. A line therefore only starts a process
+    /// when `kernelName` has that name for that pid, and after any line that is neither that nor a well-formed
+    /// socket, sockets are dropped until the next process the kernel vouches for.
+    public static func parseNettop(_ text: String, kernelName: (Int32) -> String?) -> [Flow] {
         var flows: [Flow] = []
         var pid: Int32?
         for line in text.split(separator: "\n").dropFirst() {
+            let line = String(line)
+            if let match = processLine.first(line), let name = match[1], let owner = match[2].flatMap({ Int32($0) }),
+               let known = kernelName(owner), name == known || (name.count >= 15 && known.hasPrefix(name)) {
+                pid = owner
+                continue
+            }
             let fields = line.split(separator: ",", omittingEmptySubsequences: false)
-            guard fields.count > 5 else { continue }
-            let what = fields[1]
-            if let space = what.firstIndex(of: " "), protocols.contains(what[..<space]) {
-                let proto = what[..<space]
-                let ends = what[what.index(after: space)...]
-                guard let pid, let arrow = ends.range(of: "<->"),
-                      let remote = endpoint(ends[arrow.upperBound...], v6: proto.hasSuffix("6")) else { continue }
-                let local = endpoint(ends[..<arrow.lowerBound], v6: proto.hasSuffix("6"))
+            guard let match = socketLine.first(line), let proto = match[1], let family = match[2],
+                  let near = match[3], let far = match[4], fields.count > 5 else {
+                pid = nil
+                continue
+            }
+            let local = endpoint(near, v6: family == "6")
+            switch (local, endpoint(far, v6: family == "6")) {
+            case (.invalid, _), (_, .invalid):
+                pid = nil
+            case (_, .address(let ip, let port)):
+                guard let pid else { continue }
+                var localPort = 0
+                if case .address(_, let number) = local { localPort = number }
                 flows.append(Flow(
-                    pid: pid, proto: String(proto), localPort: local?.port ?? 0, ip: remote.ip, port: remote.port,
+                    pid: pid, proto: proto + family, localPort: localPort, ip: ip, port: port,
                     state: String(fields[3]), bytesIn: UInt64(fields[4]) ?? 0, bytesOut: UInt64(fields[5]) ?? 0
                 ))
-            } else if let dot = what.lastIndex(of: "."), let owner = Int32(what[what.index(after: dot)...]) {
-                pid = owner
+            case (_, .any):
+                break
             }
         }
         return flows
     }
 
-    /// "17.1.2.3:443" or, for IPv6, "2606:4700::6810:922.443". Nil for a wildcard.
-    private static func endpoint(_ text: Substring, v6: Bool) -> (ip: String, port: Int)? {
-        guard let split = text.lastIndex(of: v6 ? "." : ":"), let port = Int(text[text.index(after: split)...]) else { return nil }
-        var ip = text[..<split]
-        if let scope = ip.firstIndex(of: "%") { ip = ip[..<scope] }
-        guard !ip.isEmpty, ip != "*" else { return nil }
-        return (String(ip), port)
+    /// "17.1.2.3:443" or, for IPv6, "2606:4700::6810:922.443"; "*" stands for any address or any port.
+    private static func endpoint(_ text: String, v6: Bool) -> Endpoint {
+        guard let split = text.lastIndex(of: v6 ? "." : ":") else { return .invalid }
+        var host = text[..<split]
+        let port = text[text.index(after: split)...]
+        if host == "*" { return port == "*" || Int(port) != nil ? .any : .invalid }
+        if let scope = host.firstIndex(of: "%") { host = host[..<scope] }
+        guard let number = Int(port), (0...65535).contains(number), Outgoing.isAddress(String(host)),
+              host.contains(":") == v6 else { return .invalid }
+        return .address(ip: String(host), port: number)
     }
 
     private static let multicast = Pattern(#"^(22[4-9]|23\d|255)\.|^ff"#, .caseInsensitive)
@@ -266,15 +294,19 @@ public enum Traffic {
     }
 
     /// What a process is called in the tree and the map: the app, the script, or the executable.
-    public static func displayName(_ command: String) -> String {
-        if let app = PortScan.app(of: command) { return app }
-        let executable = command.split(whereSeparator: \.isWhitespace).first.map(String.init) ?? command
-        let process = executable.split(separator: "/").last.map(String.init) ?? executable
-        return PortScan.script(of: command, process: process)
+    /// `executable` is the file the kernel reports; the command line stands in for it only when that isn't known.
+    public static func displayName(_ command: String, executable: String? = nil) -> String {
+        let path = executable ?? command.split(whereSeparator: \.isWhitespace).first.map(String.init) ?? command
+        if let app = PortScan.app(of: executable ?? command) { return PortScan.plain(app) }
+        let process = path.split(separator: "/").last.map(String.init) ?? path
+        return PortScan.plain(PortScan.script(of: command, process: process))
     }
 
     /// Every listening program and the chain of processes that leads to it from launchd.
-    public static func tree(programs: [ListeningProgram], procs: [Int32: PortScan.Proc]) -> [ProcessNode] {
+    /// `paths` holds each process's executable, where it is known.
+    public static func tree(
+        programs: [ListeningProgram], procs: [Int32: PortScan.Proc], paths: [Int32: String] = [:]
+    ) -> [ProcessNode] {
         var nodes: [Int32: ProcessNode] = [1: ProcessNode(pid: 1, ppid: 0, name: "launchd", ports: [], risk: nil, section: nil)]
         for program in programs {
             nodes[program.pid] = ProcessNode(
@@ -286,7 +318,10 @@ public enum Traffic {
             var at = procs[program.pid]?.ppid
             for _ in 0..<24 {
                 guard let pid = at, pid > 1, nodes[pid] == nil, let proc = procs[pid] else { break }
-                nodes[pid] = ProcessNode(pid: pid, ppid: proc.ppid, name: displayName(proc.command), ports: [], risk: nil, section: nil)
+                nodes[pid] = ProcessNode(
+                    pid: pid, ppid: proc.ppid, name: displayName(proc.command, executable: paths[pid]),
+                    ports: [], risk: nil, section: nil
+                )
                 at = proc.ppid
             }
         }
