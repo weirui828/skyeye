@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/weirui828/skyeye/compare/v1.0.1...v1.1.0) (2026-11-09)
+
+
+### Features
+
+* add a Ports & Network page ([#26](https://github.com/weirui828/skyeye/issues/26)) ([49e0e15](https://github.com/weirui828/skyeye/commit/49e0e15ecbf9e080f92b322ed5b1f8c66585194e))
+
 ## [1.0.1](https://github.com/weirui828/skyeye/compare/v1.0.0...v1.0.1) (2026-11-06)
 
 
