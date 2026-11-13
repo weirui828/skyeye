@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.0](https://github.com/weirui828/skyeye/compare/v1.1.0...v1.2.0) (2026-11-13)
+
+
+### Features
+
+* refresh the interface ([#29](https://github.com/weirui828/skyeye/issues/29)) ([cb9c1f3](https://github.com/weirui828/skyeye/commit/cb9c1f30ccee5cdb63b6a946151a352d889eb123))
+
+
+### Bug Fixes
+
+* count child processes of an outside service's port owner ([#28](https://github.com/weirui828/skyeye/issues/28)) ([b9861f6](https://github.com/weirui828/skyeye/commit/b9861f6f11f91085eb08bac662c988285c4528fc))
+
 ## [1.1.0](https://github.com/weirui828/skyeye/compare/v1.0.1...v1.1.0) (2026-11-09)
 
 
