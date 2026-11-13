@@ -22,7 +22,7 @@ Built natively for macOS. Open source. Works with your terminal and AI coding ag
 | Watch something you started elsewhere | Add its port as a monitor-only service, with no start command. |
 | Check what's exposed | Open **Ports** to see every listening port, how far it can be reached, and which programs talk to the internet. |
 
-Point at a service card to find its start, stop, restart, URL, logs, and edit buttons.
+Every service has a start or stop button. Point at a service to find its restart, URL, logs, and edit buttons.
 
 ## See how your stack fits together
 
@@ -40,7 +40,7 @@ Requires **macOS 14 or later and an Apple Silicon Mac**. No Xcode needed.
 
 1. Open the **telescope icon** in your menu bar.
 2. Select **Add service**. Give it a name, its usual start command (for example, `npm run dev`), and its project folder. Add a port if it uses one.
-3. Save, then point at the card and select **Start**.
+3. Save, then select the start button on the service.
 4. Add your other services. Set dependencies in the service editor or connect them on the canvas.
 
 ## Let your agent help
