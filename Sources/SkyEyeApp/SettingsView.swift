@@ -38,11 +38,11 @@ struct SettingsView: View {
         VStack(spacing: 0) {
             PanelHeader(title: "Settings", back: {
                 if commitShell() { route = .list }
-            }) {}
-            MenuDivider()
+            }) {
+                Text("SkyEye \(version)").font(.caption).foregroundStyle(.tertiary)
+            }
             if let error {
                 ErrorBanner(message: error) { self.error = nil }
-                MenuDivider()
             }
             Picker("Settings category", selection: Binding(
                 get: { tab },
@@ -76,12 +76,7 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(height: 320)
-            Divider().padding(.horizontal, 12)
-            Text("SkyEye \(version)")
-                .font(.caption).foregroundStyle(.tertiary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
+            .frame(height: 360)
         }
         .onAppear {
             loginItemRefresh &+= 1
@@ -192,7 +187,7 @@ struct SettingsView: View {
                 if let shellError {
                     Text(shellError)
                         .font(.caption)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Tone.warn)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -225,14 +220,14 @@ struct SettingsView: View {
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if let message = manager.logCleanupError {
-                Text(message).font(.caption).foregroundStyle(.orange)
+                Text(message).font(.caption).foregroundStyle(Tone.warn)
             }
             Button {
                 NSWorkspace.shared.open(manager.paths.logsDir)
             } label: {
                 Label("Show Logs Folder", systemImage: "folder")
             }
-            .controlSize(.small)
+            .buttonStyle(PillButtonStyle())
         }
     }
 
@@ -262,8 +257,8 @@ struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .padding(8)
-            .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.07)))
+            .padding(9)
+            .skyWell()
         }
     }
 
@@ -273,15 +268,12 @@ struct SettingsView: View {
         } label: {
             Label("Show Config in Finder", systemImage: "doc.text")
         }
-        .controlSize(.small)
+        .buttonStyle(PillButtonStyle())
         .help("Reveal config.json in Finder")
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SectionTitle(text: title)
-            content()
-        }
+        SettingsCard(title: title) { content() }
     }
 
     // MARK: Bindings
@@ -382,8 +374,9 @@ private struct SettingsToggle: View {
     let isOn: Binding<Bool>
 
     var body: some View {
-        Toggle(title, isOn: isOn)
+        Toggle(isOn: isOn) { Text(title).frame(maxWidth: .infinity, alignment: .leading) }
             .toggleStyle(.switch)
+            .controlSize(.small)
     }
 }
 

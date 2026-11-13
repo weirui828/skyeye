@@ -89,9 +89,12 @@ SkyEye does not have an automatic updater.
 4. Enter the port, if the service uses one.
 5. Select **Save**.
 
-Point at a service card to show its action buttons.
-Use these buttons to start, stop, or restart the service.
-You can also open its URL, read its logs, or edit its settings.
+Each service has a start or stop button.
+Point at a service to show more buttons: open its URL, read its logs, restart it, or edit it.
+While a service runs, select its port to open the service in your browser.
+
+Services in a group share one card. Select the group's name to fold or open the card.
+A folded card shows one dot for each service.
 
 To monitor a service without starting it, set its port and leave the command empty.
 SkyEye calls this a *monitor-only service*.
@@ -139,8 +142,18 @@ Each shared dependency appears once.
 
 - Drag a card's top bar to move it.
 - Drag the empty canvas to move the view.
-- Use the zoom buttons or **Fit** to change the view.
-- Select **Arrange all** to restore the automatic layout.
+- Use the zoom buttons to change the view. The button with two arrows fits all cards in the window.
+- Select **Arrange** to restore the automatic layout.
+
+The canvas opens with all cards in view.
+It keeps them in view when you add or connect services, until you move or zoom the view.
+Services without connections sit in rows below the others.
+
+| Line | Meaning |
+| --- | --- |
+| Green, with moving dots | A running service uses this dependency. |
+| Gray | One of the two services is not running. |
+| Red, dashed | A service runs, but its dependency does not. |
 
 To add a dependency, drag its connector onto the service that needs it.
 You can also select the dependency's connector, then the other service's connector.
@@ -221,13 +234,20 @@ The chart page does not receive command lines, folders, or file paths.
 
 ## Read resource use
 
-The status badge changes every five seconds.
-It shows CPU and memory use for the computer, SkyEye, or running services.
-The laptop, telescope, and stacked-box icons identify each view.
-Point at the badge to pause the cycle and see its short description.
+The top of the menu shows three readings: CPU and memory for the whole computer, and how many services run.
+Point at the readings to see what the running services and SkyEye use.
 
-CPU readings in the badge use total computer capacity.
-CPU readings on individual service cards use one core as 100 percent.
+Each running service shows its own CPU and memory.
+The small chart beside them shows its CPU over the last minute.
+
+CPU readings at the top use total computer capacity.
+CPU readings on individual services use one core as 100 percent.
+
+## Read logs
+
+Point at a service and select the logs button.
+SkyEye colors lines that report an error or a warning.
+Type in the field above the log to show only the lines that contain your text.
 
 ## Use the command-line tools
 
@@ -362,7 +382,15 @@ python3 -m unittest discover -s scripts/tests -v
 ./scripts/package.sh
 ```
 
-To open the ports page when the app starts, pass `--open-ports` to the app's executable.
+To open a page when the app starts, pass an argument to the app's executable:
+
+| Argument | Page |
+| --- | --- |
+| `--open-services` | The menu's content, in a window. Add `settings`, `new`, `edit:<name>` or `logs:<name>` to open that page. |
+| `--open-canvas` | The dependency canvas. |
+| `--open-ports` | The ports page. |
+
+With `SKYEYE_HOME` set, SkyEye keeps its window layout and other interface preferences apart from the main app's.
 To preview the charts in a browser with demo data, serve the `Resources` folder.
 Then open `http://localhost:8765/charts-dev/preview.html`.
 

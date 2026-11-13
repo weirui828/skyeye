@@ -92,8 +92,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         manager.adoptDetached()
         manager.startMonitoring()
+        UsageHistory.shared.start(manager: manager)
         manager.startConfiguredServices()
         notifier.requestAuthorization()
+        let arguments = CommandLine.arguments
+        if let index = arguments.firstIndex(of: "--open-services") {
+            let route = arguments.indices.contains(index + 1) ? Route(argument: arguments[index + 1]) : nil
+            ServicesWindowController.shared.show(manager: manager, monitor: monitor, route: route ?? .list)
+        }
+        if CommandLine.arguments.contains("--open-canvas") {
+            CanvasWindowController.shared.show(manager: manager)
+        }
         if CommandLine.arguments.contains("--open-ports") {
             PortsWindowController.shared.show(manager: manager, monitor: monitor)
         } else {
@@ -123,6 +132,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         if manager.config.settings.keepRunningOnQuit { manager.detachAll() } else { manager.stopAll() }
         server?.stop()
+    }
+}
+
+/// The menu's content in an ordinary window.
+@MainActor
+final class ServicesWindowController {
+    static let shared = ServicesWindowController()
+    private var window: NSWindow?
+
+    func show(manager: ServiceManager, monitor: NetworkMonitor, route: Route = .list) {
+        if window == nil {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 400, height: 600),
+                styleMask: [.titled, .closable, .miniaturizable],
+                backing: .buffered, defer: false
+            )
+            window.title = "SkyEye — Services"
+            window.isReleasedWhenClosed = false
+            window.contentView = NSHostingView(
+                rootView: MenuContentView(route: route).environmentObject(manager).environmentObject(monitor)
+            )
+            window.center()
+            self.window = window
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        window?.makeKeyAndOrderFront(nil)
     }
 }
 

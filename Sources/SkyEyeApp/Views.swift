@@ -11,9 +11,27 @@ enum Route: Equatable {
     case settings
 }
 
+extension Route {
+    /// A page named on the command line.
+    init?(argument: String) {
+        let parts = argument.split(separator: ":", maxSplits: 1).map(String.init)
+        switch (parts.first, parts.count > 1 ? parts[1] : nil) {
+        case ("settings", nil): self = .settings
+        case ("new", nil): self = .edit(nil)
+        case ("edit", let name?): self = .edit(name)
+        case ("logs", let name?): self = .logs(name)
+        default: return nil
+        }
+    }
+}
+
 struct MenuContentView: View {
     @EnvironmentObject private var manager: ServiceManager
-    @State private var route: Route = .list
+    @State private var route: Route
+
+    init(route: Route = .list) {
+        _route = State(initialValue: route)
+    }
 
     var body: some View {
         Group {
@@ -24,9 +42,13 @@ struct MenuContentView: View {
             case .settings: SettingsView(route: $route)
             }
         }
+        .transition(.opacity)
+        .animation(.easeOut(duration: 0.14), value: route)
         .frame(width: route == .settings ? 480 : 400)
         .fixedSize(horizontal: false, vertical: true)
+        .background(alignment: .top) { Brand.wash.frame(height: 150) }
         .background(SkyEyeSurface.background.ignoresSafeArea())
+        .defaultAppStorage(Preferences.store)
         .background(GeometryReader { proxy in WindowFitter(size: proxy.size) })
     }
 }
@@ -54,21 +76,6 @@ struct WindowFitter: NSViewRepresentable {
 
 // MARK: Shared bits
 
-/// Opaque surfaces keep light mode bright without picking up the desktop's tint.
-/// Dynamic colors continue to follow the system appearance.
-enum SkyEyeSurface {
-    static let background = adaptive(light: 0.985, dark: 0.12)
-    static let card = adaptive(light: 1.0, dark: 0.17)
-    static let group = adaptive(light: 0.965, dark: 0.145)
-
-    private static func adaptive(light: CGFloat, dark: CGFloat) -> Color {
-        Color(nsColor: NSColor(name: nil) { appearance in
-            let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            return NSColor(white: isDark ? dark : light, alpha: 1)
-        })
-    }
-}
-
 /// An inset separator, like the ones between groups in a system menu.
 struct MenuDivider: View {
     var body: some View {
@@ -82,10 +89,10 @@ struct MenuHighlight: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .background(RoundedRectangle(cornerRadius: 6).fill(hovering ? Color.primary.opacity(0.1) : .clear))
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(hovering ? Color.primary.opacity(0.08) : .clear))
             .contentShape(Rectangle())
             .onHover { hovering = $0 }
-            .padding(.horizontal, 5)
+            .padding(.horizontal, 6)
     }
 }
 
@@ -93,143 +100,45 @@ extension View {
     func menuHighlight() -> some View { modifier(MenuHighlight()) }
 }
 
-extension ServiceState {
-    var color: Color {
-        switch self {
-        case .running: .green
-        case .starting, .stopping: .yellow
-        case .unhealthy, .pendingApproval: .orange
-        case .crashed: .red
-        case .external: .purple
-        case .stopped: .secondary.opacity(0.5)
-        }
-    }
-}
-
-struct StatusDot: View {
-    let state: ServiceState
-
-    var body: some View {
-        ZStack {
-            if state == .starting || state == .stopping {
-                ProgressView().controlSize(.mini).scaleEffect(0.6)
-            } else {
-                Circle().fill(state.color)
-            }
-        }
-        .frame(width: 9, height: 9)
-        .accessibilityLabel(state.label)
-    }
-}
-
-struct IconButton: View {
-    let symbol: String
-    let help: String
-    var size: CGFloat = 22
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 13))
-                .frame(width: size, height: size)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.borderless)
-        .help(help)
-        .accessibilityLabel(help)
-    }
-}
-
-/// Copies text and briefly shows a checkmark so the copy is visible.
-struct CopyButton: View {
-    let text: String
-    var help: String = "Copy"
-    @State private var copied = false
-
-    var body: some View {
-        IconButton(symbol: copied ? "checkmark" : "doc.on.doc", help: copied ? "Copied" : help) {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(text, forType: .string)
-            copied = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { copied = false }
-        }
-        .foregroundStyle(copied ? Color.green : Color.primary)
-    }
-}
-
-/// Small uppercase heading used to group rows and settings.
-struct SectionTitle: View {
-    let text: String
-
-    var body: some View {
-        Text(text.uppercased())
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(.secondary)
-    }
-}
-
-/// A shared, alternating resource badge for both interfaces.
+/// The computer's CPU and memory in one line, for a toolbar.
 struct ResourceUsageStatus: View {
     @EnvironmentObject private var manager: ServiceManager
-    @State private var heldScope: Scope?
-
-    private enum Scope: Int {
-        case computer, skyEye, services
-        var tooltip: String {
-            switch self {
-            case .computer: "Whole computer"
-            case .skyEye: "SkyEye app"
-            case .services: "Running services"
-            }
-        }
-    }
-
-    private static let telescope: NSImage = {
-        let image = NSImage(contentsOf: Bundle.main.url(forResource: "Telescope", withExtension: "pdf")!)!
-        image.isTemplate = true
-        return image
-    }()
+    @ObservedObject private var history = UsageHistory.shared
 
     var body: some View {
-        TimelineView(.periodic(from: Date(timeIntervalSinceReferenceDate: 0), by: 5)) { context in
-            let scope = heldScope ?? Scope(rawValue: Int(context.date.timeIntervalSinceReferenceDate / 5) % 3)!
-            let text = summary(for: scope)
-            let highMemory = scope == .computer && manager.systemUsage.map {
-                $0.memoryTotal > 0 && Double($0.memoryUsed) / Double($0.memoryTotal) > 0.9
-            } == true
-            HStack(spacing: 5) {
-                Group {
-                    switch scope {
-                    case .computer: Image(systemName: "laptopcomputer")
-                    case .skyEye: Image(nsImage: Self.telescope).resizable().scaledToFit()
-                    case .services: Image(systemName: "square.stack.3d.up")
-                    }
-                }
-                .frame(width: 14, height: 14)
-                Text(text)
-            }
-            .font(.caption)
-            .monospacedDigit()
-            .lineLimit(1)
-            .frame(width: 184, alignment: .leading)
-            .foregroundStyle(highMemory ? Color.orange : Color.secondary)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 4)
-            .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(scope.tooltip + ": " + text)
-            .help(scope.tooltip)
-            .onHover { hovering in heldScope = hovering ? scope : nil }
+        let usage = manager.systemUsage
+        let memoryFraction = usage.map { $0.memoryTotal > 0 ? Double($0.memoryUsed) / Double($0.memoryTotal) : 0 } ?? 0
+        HStack(spacing: 7) {
+            Image(systemName: "cpu").font(.system(size: 11)).foregroundStyle(.secondary)
+            Text(usage?.cpuPercent.map { String(format: "%.0f%%", $0) } ?? "—")
+            Sparkline(values: history.system, floor: 20).frame(width: 44, height: 14)
+            Divider().frame(height: 12)
+            Image(systemName: "memorychip").font(.system(size: 11)).foregroundStyle(.secondary)
+            Text(usage.map(Self.memory) ?? "—")
+                .foregroundStyle(memoryFraction > 0.9 ? Tone.warn : Color.primary.opacity(0.85))
         }
+        .font(.system(size: 11.5, weight: .medium))
+        .monospacedDigit()
+        .lineLimit(1)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Color.primary.opacity(0.06), in: Capsule())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Whole computer: " + (usage?.summary ?? "no reading yet"))
+        .help(Self.breakdown(manager))
     }
 
-    private func summary(for scope: Scope) -> String {
-        switch scope {
-        case .computer: manager.systemUsage?.summary ?? "CPU — · —"
-        case .skyEye: manager.skyEyeUsage?.summary ?? "CPU — · —"
-        case .services: manager.servicesUsage?.summary ?? "CPU — · —"
-        }
+    static func memory(_ usage: SystemUsage) -> String {
+        let gb = 1_073_741_824.0
+        return String(format: "%.1f / %.0f GB", Double(usage.memoryUsed) / gb, Double(usage.memoryTotal) / gb)
+    }
+
+    static func breakdown(_ manager: ServiceManager) -> String {
+        [
+            "Whole computer: " + (manager.systemUsage?.summary ?? "—"),
+            "Running services: " + (manager.servicesUsage?.summary ?? "—"),
+            "SkyEye app: " + (manager.skyEyeUsage?.summary ?? "—"),
+        ].joined(separator: "\n")
     }
 }
 
@@ -239,16 +148,17 @@ struct PanelHeader<Trailing: View>: View {
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             if let back {
-                IconButton(symbol: "chevron.left", help: "Back", action: back)
+                IconButton(symbol: "chevron.left", help: "Back", size: 26, filled: true, action: back)
             }
-            Text(title).font(.headline).lineLimit(1)
+            Text(title).font(.system(size: 15, weight: .semibold)).lineLimit(1)
             Spacer()
             trailing
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
     }
 }
 
@@ -257,14 +167,116 @@ struct ErrorBanner: View {
     let dismiss: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-            Text(message).font(.callout).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
-            Spacer(minLength: 0)
-            IconButton(symbol: "xmark", help: "Dismiss", action: dismiss)
+        NoticeBanner(message: message, dismiss: dismiss)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+    }
+}
+
+struct Overview: View {
+    @EnvironmentObject private var manager: ServiceManager
+    @ObservedObject private var history = UsageHistory.shared
+    let openSettings: () -> Void
+
+    private var states: [ServiceState] { manager.snapshots.map(\.state) }
+    private var upCount: Int { states.filter { $0 == .running || $0 == .external }.count }
+
+    /// One sentence on how things stand, and the color of the worst of it.
+    private var status: (text: String, color: Color) {
+        let total = states.count
+        guard total > 0 else { return ("Nothing to watch yet", .secondary) }
+        var problems: [String] = []
+        let crashed = states.filter { $0 == .crashed }.count
+        let unhealthy = states.filter { $0 == .unhealthy }.count
+        let waiting = manager.snapshots.filter { $0.state == .pendingApproval || !$0.approved }.count
+        if crashed > 0 { problems.append("\(crashed) crashed") }
+        if unhealthy > 0 { problems.append("\(unhealthy) unhealthy") }
+        if waiting > 0 { problems.append("\(waiting) " + (waiting == 1 ? "needs" : "need") + " approval") }
+        let running = upCount == total ? "All \(total) running" : "\(upCount) of \(total) running"
+        if problems.isEmpty { return (running, upCount == total ? Tone.good : .secondary) }
+        return (([running] + problems).joined(separator: " · "), crashed > 0 ? Tone.bad : Tone.warn)
+    }
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 10) {
+                BrandMark(size: 32)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("SkyEye").font(.system(size: 15, weight: .semibold))
+                    Text(status.text)
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(status.color)
+                        .lineLimit(1)
+                        .contentTransition(.numericText())
+                }
+                Spacer(minLength: 0)
+                IconButton(symbol: "gearshape", help: "Settings (⌘,)", size: 28, filled: true, action: openSettings)
+                    .keyboardShortcut(",")
+            }
+            HStack(spacing: 8) {
+                cpu
+                memory
+                services
+            }
+            .help(ResourceUsageStatus.breakdown(manager))
         }
-        .padding(10)
-        .background(Color.orange.opacity(0.12))
+        .padding(.horizontal, 12)
+        .padding(.top, 12)
+        .padding(.bottom, 4)
+    }
+
+    private var cpu: some View {
+        let value = manager.systemUsage?.cpuPercent
+        return Metric(title: "CPU", value: value.map { String(format: "%.0f", $0) } ?? "—", unit: "%") {
+            Sparkline(values: history.system, tint: (value ?? 0) > 85 ? Tone.warn : Brand.tint, floor: 20)
+        }
+        .accessibilityLabel("CPU, whole computer: " + (value.map { String(format: "%.0f percent", $0) } ?? "no reading yet"))
+    }
+
+    private var memory: some View {
+        let usage = manager.systemUsage
+        let gb = 1_073_741_824.0
+        let fraction = usage.map { $0.memoryTotal > 0 ? Double($0.memoryUsed) / Double($0.memoryTotal) : 0 } ?? 0
+        return Metric(
+            title: "Memory",
+            value: usage.map { String(format: "%.1f", Double($0.memoryUsed) / gb) } ?? "—",
+            unit: usage.map { String(format: "/ %.0f GB", Double($0.memoryTotal) / gb) } ?? ""
+        ) {
+            Meter(fraction: fraction, tint: fraction > 0.9 ? Tone.warn : Brand.tint).frame(maxHeight: .infinity, alignment: .bottom)
+        }
+        .accessibilityLabel("Memory, whole computer: " + (usage.map(ResourceUsageStatus.memory) ?? "no reading yet"))
+    }
+
+    private var services: some View {
+        Metric(title: "Services", value: String(upCount), unit: "/ \(states.count) up") {
+            StateBar(states: states).frame(maxHeight: .infinity, alignment: .bottom)
+        }
+        .accessibilityLabel("\(upCount) of \(states.count) services running")
+    }
+}
+
+private struct Metric<Graphic: View>: View {
+    let title: String
+    let value: String
+    let unit: String
+    @ViewBuilder var graphic: Graphic
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title).font(.system(size: 10.5, weight: .medium)).foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(value).font(.system(size: 18, weight: .semibold, design: .rounded)).contentTransition(.numericText())
+                Text(unit).font(.system(size: 10.5, weight: .medium)).foregroundStyle(.secondary)
+            }
+            .monospacedDigit()
+            .lineLimit(1)
+            graphic.frame(height: 14)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .skyCard(radius: 11)
+        .accessibilityElement(children: .ignore)
     }
 }
 
@@ -327,79 +339,58 @@ struct ServiceListView: View {
         }
     }
 
-    private var upCount: Int {
-        manager.snapshots.filter { $0.state == .running || $0.state == .external }.count
-    }
-
     var body: some View {
         VStack(spacing: 0) {
-            PanelHeader(title: "SkyEye") {
-                ResourceUsageStatus()
-                if !manager.snapshots.isEmpty {
-                    Text(String(upCount) + "/" + String(manager.snapshots.count) + " up")
-                        .font(.caption.weight(.medium))
-                        .monospacedDigit()
-                        .foregroundStyle(upCount == manager.snapshots.count ? Color.secondary : Color.orange)
-                        .help("Services running, including ones started outside SkyEye")
-                        .accessibilityLabel(String(upCount) + " of " + String(manager.snapshots.count) + " services running")
-                }
-                IconButton(symbol: "gearshape", help: "Settings") { route = .settings }
-            }
-            MenuDivider()
+            Overview { route = .settings }
             if let message = error ?? manager.loadError ?? manager.autoStartError {
                 ErrorBanner(message: message) { error = nil; manager.dismissAutoStartError() }
-                MenuDivider()
             }
-            HStack {
+            HStack(spacing: 6) {
                 Button {
                     CanvasWindowController.shared.show(manager: manager)
                 } label: {
                     Label("Canvas", systemImage: "point.3.connected.trianglepath.dotted")
                 }
-                .help("Open dependency canvas")
+                .help("See which services depend on which")
                 PortsButton()
                 Spacer()
                 Button { route = .edit(nil) } label: {
                     Label("Add service", systemImage: "plus")
                 }
+                .buttonStyle(PillButtonStyle(prominent: true))
+                .keyboardShortcut("n")
+                .help("Add a service (⌘N)")
             }
-            .buttonStyle(.borderless)
-            .controlSize(.small)
+            .buttonStyle(PillButtonStyle())
             .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .padding(.vertical, 8)
             if manager.snapshots.isEmpty {
                 emptyState
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 8) {
                         let pending = manager.snapshots.filter { $0.state == .pendingApproval }
                         if !pending.isEmpty {
-                            sectionTitle("Needs your approval")
+                            SectionTitle(text: "Needs your approval").padding(.horizontal, 4).padding(.top, 2)
                             ForEach(pending) { ApprovalRow(snapshot: $0, onError: { error = $0 }) }
                         }
                         ForEach(items) { item in
                             switch item {
                             case .group(let group, let groupItems):
-                                VStack(spacing: 8) {
-                                    GroupHeader(group: group, items: groupItems, onError: { error = $0 })
-                                    ForEach(groupItems) { snapshot in
-                                        ServiceCard(snapshot: snapshot, route: $route, onError: { error = $0 })
-                                    }
-                                }
-                                .padding(9)
-                                .background(SkyEyeSurface.group, in: RoundedRectangle(cornerRadius: 13))
-                                .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(Color.primary.opacity(0.07)))
+                                GroupCard(group: group, items: groupItems, route: $route, onError: { error = $0 })
                             case .single(let snapshot):
                                 ServiceCard(snapshot: snapshot, route: $route, onError: { error = $0 })
                             }
                         }
                     }
-                    .padding(12)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 2)
+                    .padding(.bottom, 10)
                 }
-                .frame(maxHeight: 460)
+                .frame(maxHeight: 470)
                 .fixedSize(horizontal: false, vertical: true)
             }
-            MenuDivider()
+            Divider().opacity(0.6)
             footer
         }
         // The Ports button's count comes from the last scan: refresh it when the menu opens.
@@ -411,49 +402,57 @@ struct ServiceListView: View {
         let active = manager.activeCount
         return Button { NSApp.terminate(nil) } label: {
             HStack(spacing: 6) {
-                Text("Quit")
+                Image(systemName: "power").font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+                Text("Quit SkyEye")
                 Spacer()
                 if active > 0 {
                     Text(keepRunning ? "Services keep running" : "Stops " + String(active) + (active == 1 ? " service" : " services"))
-                        .foregroundStyle(keepRunning ? Color.secondary : Color.orange)
+                        .foregroundStyle(keepRunning ? Color.secondary : Tone.warn)
                 }
-                Text("⌘Q").foregroundStyle(.secondary)
+                Text("⌘Q").foregroundStyle(.tertiary)
             }
-            .font(.system(size: 13))
-            .padding(.horizontal, 7)
-            .padding(.vertical, 4)
+            .font(.system(size: 12))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
         }
         .buttonStyle(.plain)
         .keyboardShortcut("q")
         .menuHighlight()
-        .padding(.bottom, 5)
+        .padding(.vertical, 5)
         .help(active > 0 && !keepRunning ? "Stops the running services first" : "")
     }
 
-    @ViewBuilder
-    private func sectionTitle(_ title: String) -> some View {
-        SectionTitle(text: title)
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
-            .padding(.bottom, 2)
-    }
-
     private var emptyState: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "camera.aperture").font(.largeTitle).foregroundStyle(.tertiary)
-            Text("No services yet").font(.headline)
-            Text("Add one here, run `sky add` in a terminal,\nor ask your coding agent through MCP.")
+        VStack(spacing: 10) {
+            BrandMark(size: 52)
+            Text("Nothing to watch yet").font(.system(size: 15, weight: .semibold)).padding(.top, 4)
+            Text("Add the servers you run while you work.\nSkyEye starts them in order and keeps an eye on them.")
                 .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            Button { route = .edit(nil) } label: { Label("Add your first service", systemImage: "plus") }
+                .buttonStyle(PillButtonStyle(prominent: true))
+                .padding(.top, 2)
+            HStack(spacing: 5) {
+                Text("or run")
+                Text("sky add").font(.system(size: 11, design: .monospaced)).padding(.horizontal, 5).padding(.vertical, 1).skyWell(radius: 4)
+                Text("in a terminal, or ask your coding agent")
+            }
+            .font(.caption).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 28)
+        .padding(.horizontal, 20)
+        .padding(.top, 22)
+        .padding(.bottom, 30)
     }
 }
 
-struct GroupHeader: View {
+/// A group's services on one card.
+struct GroupCard: View {
     @EnvironmentObject private var manager: ServiceManager
+    /// The names of the folded groups, one to a line.
+    @AppStorage("foldedGroups") private var folded = ""
     let group: String
     let items: [ServiceSnapshot]
+    @Binding var route: Route
     let onError: (String?) -> Void
 
     private var upCount: Int {
@@ -470,34 +469,64 @@ struct GroupHeader: View {
     }
     private var transitioning: Bool { items.contains { $0.state == .starting || $0.state == .stopping } }
 
+    private var isFolded: Bool { folded.split(separator: "\n").contains(Substring(group)) }
+
+    private func toggleFold() {
+        var names = folded.split(separator: "\n").map(String.init).filter { $0 != group }
+        if !isFolded { names.append(group) }
+        withAnimation(.easeInOut(duration: 0.18)) { folded = names.joined(separator: "\n") }
+    }
+
     var body: some View {
-        HStack(spacing: 6) {
-            Text(group).font(.system(size: 13, weight: .semibold)).lineLimit(1)
-            Text(String(upCount) + "/" + String(items.count))
-                .font(.caption2)
-                .monospacedDigit()
-                .foregroundStyle(upCount == items.count ? Color.secondary : Color.orange)
-                .help(String(upCount) + " of " + String(items.count) + " running")
-                .accessibilityLabel(String(upCount) + " of " + String(items.count) + " services running")
-            Spacer()
-            if !startable.isEmpty {
-                Button { run(.start, items: startable) } label: {
-                    Label("Start all", systemImage: "play.fill")
+        VStack(spacing: 0) {
+            header
+            if !isFolded {
+                ForEach(items) { snapshot in
+                    Divider().padding(.leading, 34).opacity(0.7)
+                    ServiceCard(snapshot: snapshot, route: $route, onError: onError, style: .row)
                 }
-                .disabled(transitioning)
-            }
-            if !manageableActive.isEmpty {
-                Button { run(.stop, items: manageableActive) } label: {
-                    Label("Stop all", systemImage: "stop.fill")
-                }
-                .disabled(transitioning)
             }
         }
-        .buttonStyle(.borderless)
-        .controlSize(.small)
-        .font(.caption)
-        .padding(.horizontal, 3)
-        .padding(.vertical, 3)
+        .padding(.bottom, isFolded ? 0 : 3)
+        .skyCard()
+    }
+
+    private var header: some View {
+        HStack(spacing: 6) {
+            Button(action: toggleFold) {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8.5, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isFolded ? 0 : 90))
+                        .frame(width: 16)
+                    Text(group).font(.system(size: 12.5, weight: .semibold)).lineLimit(1)
+                    Chip(text: String(upCount) + "/" + String(items.count), tint: upCount == items.count ? .secondary : Tone.warn)
+                    if isFolded {
+                        HStack(spacing: 4) {
+                            ForEach(items) { Circle().fill($0.state.color).frame(width: 6, height: 6) }
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(isFolded ? "Show the services in " + group : "Fold " + group)
+            .accessibilityLabel("\(group), \(upCount) of \(items.count) running, \(isFolded ? "folded" : "open")")
+            if !startable.isEmpty {
+                Button { run(.start, items: startable) } label: { Label("Start all", systemImage: "play.fill") }
+                    .disabled(transitioning)
+            }
+            if !manageableActive.isEmpty {
+                Button { run(.stop, items: manageableActive) } label: { Label("Stop all", systemImage: "stop.fill") }
+                    .disabled(transitioning)
+            }
+        }
+        .buttonStyle(QuietButtonStyle())
+        .padding(.leading, 8)
+        .padding(.trailing, 7)
+        .padding(.vertical, 7)
     }
 
     private func run(_ action: ControlRequest.Action, items: [ServiceSnapshot]) {
@@ -511,11 +540,18 @@ struct GroupHeader: View {
 }
 
 struct ServiceCard: View {
+    /// On its own a service is a card.
+    enum Style { case card, row }
+
     @EnvironmentObject private var manager: ServiceManager
+    @ObservedObject private var history = UsageHistory.shared
     let snapshot: ServiceSnapshot
     @Binding var route: Route
     let onError: (String?) -> Void
     var onStop: (() -> Void)? = nil
+    var style: Style = .card
+    /// Leaves out the small chart, where the row is narrow.
+    var compact = false
     @State private var hovering = false
     @State private var confirmRemove = false
 
@@ -525,84 +561,84 @@ struct ServiceCard: View {
         [.running, .unhealthy, .starting, .external].contains(snapshot.state)
     }
 
+    private var needsApproval: Bool { !snapshot.approved && service.command != nil }
+
     private var subtitle: String {
         var text: String
+        let detail = snapshot.detail.flatMap { $0.isEmpty ? nil : $0 }
         switch snapshot.state {
         case .running:
-            text = snapshot.usageSummary ?? "running"
+            text = snapshot.startedAt.map { "Running for " + Format.uptime(Date().timeIntervalSince($0)) } ?? "Running"
         case .pendingApproval:
-            text = "command needs approval in the menu bar"
+            text = "Waiting for your approval"
         case .external:
-            if let detail = snapshot.detail, !detail.isEmpty {
-                text = "running outside SkyEye — " + detail
-            } else {
-                text = "running outside SkyEye"
-            }
+            text = "Running outside SkyEye" + (detail.map { " — " + $0 } ?? "")
+        case .stopped:
+            text = (service.command == nil ? "Not running — monitor only" : "Stopped") + (detail.map { " — " + $0 } ?? "")
         default:
-            if let detail = snapshot.detail, !detail.isEmpty {
-                text = snapshot.state.label + " — " + detail
-            } else {
-                text = snapshot.state.label
-            }
+            let label = snapshot.state.label
+            text = label.prefix(1).uppercased() + label.dropFirst() + (detail.map { " — " + $0 } ?? "")
         }
-        if !snapshot.approved, service.command != nil, snapshot.state != .pendingApproval {
+        if needsApproval, snapshot.state != .pendingApproval {
             text += " · new command needs approval"
         }
         return text
     }
 
-    private var placeholder: some View {
-        Color.clear.frame(width: 22, height: 22)
+    private var subtitleColor: Color {
+        switch snapshot.state {
+        case .crashed: Tone.bad
+        case .unhealthy, .pendingApproval: Tone.warn
+        default: .secondary
+        }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                nameLabel
-                Spacer(minLength: 4)
-                StatusDot(state: snapshot.state)
-                Text(snapshot.state.label)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            HStack(spacing: 6) {
-                if let port = service.port {
-                    Text(":" + String(port))
-                        .monospacedDigit()
-                }
-                Text(subtitle)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer(minLength: 0)
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .help(subtitle)
-            .opacity(hovering ? 0 : 1)
-            .overlay(alignment: .trailing) {
-                HStack(spacing: 3) {
-                    if !snapshot.approved, service.command != nil {
-                        Button("Approve") { approve() }
-                            .controlSize(.small)
+        HStack(spacing: 7) {
+            StatusDot(state: snapshot.state)
+            HStack(spacing: 4) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(service.name).font(.system(size: 13, weight: .medium)).lineLimit(1).layoutPriority(1)
+                        portChip.fixedSize()
                     }
+                    Text(subtitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(subtitleColor)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(subtitle)
+                }
+                .layoutPriority(1)
+                Spacer(minLength: 0)
+                usage.opacity(hovering ? 0 : 1)
+            }
+            .overlay(alignment: .trailing) {
+                HStack(spacing: 0) {
                     hoverActions
-                    primaryAction
                     moreMenu
                 }
-                .padding(.leading, 6)
-                .background(SkyEyeSurface.card, in: RoundedRectangle(cornerRadius: 6))
+                .padding(.leading, 22)
+                .background(LinearGradient(
+                    stops: [.init(color: SkyEyeSurface.card.opacity(0), location: 0), .init(color: SkyEyeSurface.card, location: 0.22)],
+                    startPoint: .leading, endPoint: .trailing
+                ))
                 .opacity(hovering ? 1 : 0)
                 .allowsHitTesting(hovering)
             }
-            .frame(minHeight: 24)
+            .animation(.easeOut(duration: 0.12), value: hovering)
+            primaryAction
         }
-        .padding(12)
-        .background(SkyEyeSurface.card, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(hovering ? 0.18 : 0.08)))
-        .contentShape(RoundedRectangle(cornerRadius: 10))
+        .padding(.leading, 8)
+        .padding(.trailing, 8)
+        .padding(.vertical, 7)
+        .frame(minHeight: 46)
+        .modifier(Surface(style: style, hovering: hovering))
+        .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .help([service.command, snapshot.pid.map { "pid " + String($0) }].compactMap { $0 }.joined(separator: "\n"))
         .contextMenu { menuActions }
+        .accessibilityElement(children: .contain)
         .confirmationDialog("Remove " + service.name + "?", isPresented: $confirmRemove, titleVisibility: .visible) {
             Button("Remove Service", role: .destructive) {
                 do { try manager.removeService(named: service.name) } catch { onError(error.localizedDescription) }
@@ -613,30 +649,81 @@ struct ServiceCard: View {
         }
     }
 
-    @ViewBuilder
-    private var nameLabel: some View {
-        if let url = service.url, isLive, let target = URL(string: url) {
-            Button {
-                NSWorkspace.shared.open(target)
-            } label: {
-                Text(service.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
+    private struct Surface: ViewModifier {
+        let style: Style
+        let hovering: Bool
+
+        func body(content: Content) -> some View {
+            switch style {
+            case .card:
+                content.skyCard(stroke: hovering ? Color.primary.opacity(0.17) : SkyEyeSurface.hairline)
+            case .row:
+                content
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.primary.opacity(hovering ? 0.045 : 0))
+                            .padding(.horizontal, 3)
+                    )
             }
-            .buttonStyle(.plain)
-            .help("Open " + url)
-        } else {
-            Text(service.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
+        }
+    }
+
+    @ViewBuilder
+    private var portChip: some View {
+        if let port = service.port {
+            if isLive, let url = service.url, let target = URL(string: url) {
+                Button { NSWorkspace.shared.open(target) } label: {
+                    Chip(text: ":" + String(port), tint: Brand.tint, monospaced: true)
+                }
+                .buttonStyle(.plain)
+                .help("Open " + url)
+                .accessibilityLabel("Open " + url)
+            } else {
+                Chip(text: ":" + String(port), monospaced: true)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var usage: some View {
+        if needsApproval, snapshot.state != .pendingApproval {
+            Button("Approve") { approve() }
+                .buttonStyle(PillButtonStyle(prominent: true))
+        } else if let memory = snapshot.memoryBytes {
+            HStack(spacing: 7) {
+                if !compact {
+                    Sparkline(values: history.services[snapshot.id] ?? [], floor: 5)
+                        .frame(width: 36, height: 16)
+                }
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(snapshot.cpuPercent.map(Format.percent) ?? "—")
+                    Text(Format.memory(memory))
+                }
+                .font(.system(size: 10.5, weight: .medium))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .fixedSize()
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(snapshot.usageSummary ?? "")
         }
     }
 
     @ViewBuilder
     private var hoverActions: some View {
+        if snapshot.state == .external, let port = service.port {
+            Button("Kill") { killPort(port) }
+                .buttonStyle(QuietButtonStyle())
+                .help("Stop the process holding port " + String(port))
+        }
         if let url = service.url {
             IconButton(symbol: "globe", help: "Open in browser: " + url) {
                 if let target = URL(string: url) { NSWorkspace.shared.open(target) }
             }
             .disabled(!isLive)
         }
-        IconButton(symbol: "terminal", help: "Show logs") { route = .logs(service.name) }
+        IconButton(symbol: "text.alignleft", help: "Show logs") { route = .logs(service.name) }
         if service.command != nil {
             IconButton(symbol: "arrow.clockwise", help: "Restart") { run(.restart) }
                 .disabled(!(snapshot.state.isActive || snapshot.state == .crashed) || snapshot.state == .stopping || !snapshot.approved)
@@ -645,20 +732,16 @@ struct ServiceCard: View {
 
     @ViewBuilder
     private var primaryAction: some View {
-        if snapshot.state == .external, let port = service.port {
-            Button("Kill") { killPort(port) }
-                .controlSize(.small)
-                .help("Stop the process holding port " + String(port))
-        } else if service.command != nil {
+        if service.command != nil, snapshot.state != .external {
             if snapshot.state.isActive {
-                IconButton(symbol: "stop.fill", help: "Stop") { run(.stop) }
+                IconButton(symbol: "stop.fill", help: "Stop " + service.name, size: 26, tint: .secondary, filled: true) { run(.stop) }
                     .disabled(snapshot.state == .stopping)
             } else {
-                IconButton(symbol: "play.fill", help: "Start") { run(.start) }
+                IconButton(symbol: "play.fill", help: "Start " + service.name, size: 26, tint: Brand.tint, filled: true) { run(.start) }
                     .disabled(!snapshot.approved)
             }
         } else {
-            placeholder
+            Color.clear.frame(width: 26, height: 26)
         }
     }
 
@@ -667,7 +750,8 @@ struct ServiceCard: View {
             menuActions
         } label: {
             Image(systemName: "ellipsis")
-                .frame(width: 22, height: 22)
+                .font(.system(size: 12, weight: .medium))
+                .frame(width: 24, height: 24)
                 .contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton)
@@ -680,7 +764,7 @@ struct ServiceCard: View {
     private var menuActions: some View {
         Button("Show Logs") { route = .logs(service.name) }
         Button("Edit…") { route = .edit(service.name) }
-        if !snapshot.approved, service.command != nil {
+        if needsApproval {
             Button("Approve Command") { approve() }
         }
         if let url = service.url {
@@ -733,41 +817,40 @@ struct ApprovalRow: View {
 
     var body: some View {
         let s = snapshot.service
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Image(systemName: "checkmark.shield").foregroundStyle(.orange)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 7) {
+                Image(systemName: "checkmark.shield.fill").foregroundStyle(Tone.warn)
                 Text(s.name).font(.system(size: 13, weight: .semibold))
-                if let port = s.port { Text(":\(String(port))").foregroundStyle(.secondary) }
+                if let port = s.port { Chip(text: ":" + String(port), monospaced: true) }
                 Spacer()
+                Text("from the terminal or an AI agent").font(.caption2).foregroundStyle(.secondary)
             }
-            Text(s.command ?? "")
+            // Verbatim: this is text from outside SkyEye, shown exactly as it will run.
+            Text(verbatim: s.command ?? "")
                 .font(.system(size: 11, design: .monospaced))
                 .textSelection(.enabled)
-                .padding(6)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(0.07)))
+                .skyWell()
             if let dir = s.directory {
-                Label(dir, systemImage: "folder").font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                Label(dir, systemImage: "folder").labelStyle(TightLabelStyle())
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
             }
             if !s.env.isEmpty {
-                Text("env: " + s.env.keys.sorted().map { "\($0)=\(s.env[$0]!)" }.joined(separator: " "))
+                Text(verbatim: "env: " + s.env.keys.sorted().map { "\($0)=\(s.env[$0]!)" }.joined(separator: " "))
                     .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary).lineLimit(2)
             }
-            HStack {
-                Text("Added from the terminal or an AI agent").font(.caption2).foregroundStyle(.tertiary)
+            HStack(spacing: 6) {
                 Spacer()
                 Button("Remove…") { confirmRemove = true }
-                Button("Approve") {
-                    do { try manager.approve(named: s.name) } catch { onError(error.localizedDescription) }
-                }
-                .buttonStyle(.borderedProminent)
+                    .buttonStyle(PillButtonStyle())
+                Button { approve() } label: { Label("Approve", systemImage: "checkmark") }
+                    .buttonStyle(PillButtonStyle(prominent: true))
             }
-            .controlSize(.small)
         }
-        .padding(10)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color.orange.opacity(0.08)))
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
+        .padding(11)
+        .skyCard(stroke: Tone.warn.opacity(0.45))
         .confirmationDialog("Remove " + s.name + "?", isPresented: $confirmRemove, titleVisibility: .visible) {
             Button("Remove Service", role: .destructive) {
                 do { try manager.removeService(named: s.name) } catch { onError(error.localizedDescription) }
@@ -776,6 +859,10 @@ struct ApprovalRow: View {
         } message: {
             Text("It will be stopped and removed from SkyEye. Its log file stays on disk.")
         }
+    }
+
+    private func approve() {
+        do { try manager.approve(named: snapshot.service.name) } catch { onError(error.localizedDescription) }
     }
 }
 
@@ -786,34 +873,83 @@ struct LogView: View {
     let name: String
     @Binding var route: Route
     @State private var text = ""
+    @State private var filter = ""
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     private var logURL: URL { manager.paths.logFile(for: name) }
 
+    private var lines: [Substring] {
+        let all = text.split(separator: "\n", omittingEmptySubsequences: false)
+        let wanted = filter.trimmingCharacters(in: .whitespaces)
+        return wanted.isEmpty ? all : all.filter { $0.localizedCaseInsensitiveContains(wanted) }
+    }
+
     var body: some View {
+        let shown = lines
         VStack(spacing: 0) {
-            PanelHeader(title: "\(name) logs", back: { route = .list }) {
-                CopyButton(text: text, help: "Copy logs")
+            PanelHeader(title: name, back: { route = .list }) {
+                if let state = manager.snapshots.first(where: { $0.id == name })?.state {
+                    StatusDot(state: state)
+                    Text(state.label).font(.caption).foregroundStyle(.secondary)
+                }
+                CopyButton(text: shown.joined(separator: "\n"), help: "Copy logs")
                 IconButton(symbol: "arrow.up.forward.app", help: "Open in Console") { NSWorkspace.shared.open(logURL) }
             }
-            MenuDivider()
+            HStack(spacing: 6) {
+                Image(systemName: "line.3.horizontal.decrease").font(.system(size: 11)).foregroundStyle(.secondary)
+                TextField("Show only lines with…", text: $filter)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                if !filter.isEmpty {
+                    Text("\(shown.count) lines").font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                    IconButton(symbol: "xmark.circle.fill", help: "Show every line", size: 18) { filter = "" }
+                }
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .skyWell(radius: 8)
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
             ScrollViewReader { proxy in
                 ScrollView {
-                    Text(text.isEmpty ? "(no output yet)" : text)
+                    Text(text.isEmpty ? AttributedString("No output yet") : Self.styled(shown))
                         .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(text.isEmpty ? Color.secondary : Color.primary)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
+                        .padding(10)
                     Color.clear.frame(height: 1).id("bottom")
                 }
-                .frame(height: 400)
-                .background(Color(nsColor: .textBackgroundColor))
+                .frame(height: 390)
+                .background(SkyEyeSurface.card)
+                .overlay(alignment: .top) { Divider().opacity(0.6) }
                 .onChange(of: text) { proxy.scrollTo("bottom") }
                 .onAppear { proxy.scrollTo("bottom") }
             }
         }
         .onAppear(perform: load)
         .onReceive(timer) { _ in load() }
+    }
+
+    /// Colors the lines that matter.
+    private static func styled(_ lines: [Substring]) -> AttributedString {
+        var result = AttributedString()
+        for (index, line) in lines.enumerated() {
+            var piece = AttributedString(String(line) + (index < lines.count - 1 ? "\n" : ""))
+            let lower = line.lowercased()
+            if line.hasPrefix("=== SkyEye") {
+                piece.foregroundColor = Color.secondary
+                piece.font = .system(size: 11, weight: .semibold, design: .monospaced)
+            } else if line.hasPrefix("$ ") {
+                piece.foregroundColor = Brand.tint
+            } else if ["error", "fatal", "exception", "panic", "traceback", "failed"].contains(where: lower.contains) {
+                piece.foregroundColor = Tone.bad
+            } else if lower.contains("warn") {
+                piece.foregroundColor = Tone.warn
+            }
+            result += piece
+        }
+        return result
     }
 
     private func load() {

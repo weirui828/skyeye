@@ -94,14 +94,14 @@ final class NetworkMonitor: ObservableObject {
     /// A scan nobody asked for, to keep the menu's count current. A scan asks every listening port what it is,
     /// so SkyEye does this on its own only once the user has opened the page and so has seen what it does.
     func rescanInBackground() {
-        guard UserDefaults.standard.bool(forKey: Self.openedKey) else { return }
+        guard Preferences.store.bool(forKey: Self.openedKey) else { return }
         rescanIfStale()
     }
 
     /// Keeps the page current while its window is open: a full scan every `interval`, and a traffic sample every `sampling`.
     func startPolling(every interval: TimeInterval = 30, sampling: TimeInterval = 10) {
         stopPolling()
-        UserDefaults.standard.set(true, forKey: Self.openedKey)
+        Preferences.store.set(true, forKey: Self.openedKey)
         // Samples from before the window was closed would draw as one long flat stretch: start the chart over.
         if let last = recorder.history.times.last, Date().timeIntervalSince(last) > 60 {
             recorder = Traffic.Recorder()
@@ -146,10 +146,14 @@ final class PortsWindowController: NSObject, NSWindowDelegate {
             window.isReleasedWhenClosed = false
             window.contentView = NSHostingView(
                 rootView: PortsWorkspace().environmentObject(manager).environmentObject(monitor)
+                    .defaultAppStorage(Preferences.store)
             )
             window.contentMinSize = NSSize(width: 900, height: 560)
-            if !window.setFrameUsingName("SkyEyePorts") { window.center() }
-            window.setFrameAutosaveName("SkyEyePorts")
+            window.center()
+            if !Preferences.isCustomHome {
+                window.setFrameUsingName("SkyEyePorts")
+                window.setFrameAutosaveName("SkyEyePorts")
+            }
             window.delegate = self
             self.window = window
         }
@@ -183,7 +187,7 @@ struct PortsButton: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
-                        .background(Color.red, in: Capsule())
+                        .background(Tone.bad, in: Capsule())
                 }
             }
         }
@@ -197,10 +201,10 @@ struct PortsButton: View {
 private extension PortRisk {
     var color: Color {
         switch self {
-        case .high: .red
-        case .medium: .orange
-        case .low: .blue
-        case .info: .secondary.opacity(0.6)
+        case .high: Tone.bad
+        case .medium: Tone.warn
+        case .low: Brand.tint
+        case .info: Tone.idle
         }
     }
 }
@@ -257,14 +261,13 @@ struct PortsWorkspace: View {
     var body: some View {
         VStack(spacing: 0) {
             toolbar
-            Divider()
+            Divider().opacity(0.7)
             if let notice {
                 noticeBar(notice)
-                Divider()
             }
             if let scan = monitor.scan {
                 tiles(scan)
-                Divider()
+                Divider().opacity(0.7)
                 GeometryReader { geometry in
                     HStack(spacing: 0) {
                         charts(scan)
@@ -288,15 +291,14 @@ struct PortsWorkspace: View {
     // MARK: Header
 
     private var toolbar: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "shield.lefthalf.filled").foregroundStyle(.secondary)
-            Text("Ports & network").font(.headline)
+        HStack(spacing: 10) {
+            BrandMark(size: 26)
+            Text("Ports & network").font(.system(size: 15, weight: .semibold))
             if let scan = monitor.scan {
                 let ports = scan.programs.reduce(0) { $0 + $1.ports.count }
-                Text(scan.programs.isEmpty
+                Chip(text: scan.programs.isEmpty
                      ? "Nothing is listening"
-                     : "\(scan.programs.count) programs listening on \(ports) ports")
-                    .font(.callout).foregroundStyle(.secondary)
+                     : "\(scan.programs.count) programs on \(ports) ports")
                 firewall(scan.firewall)
             }
             Spacer()
@@ -311,35 +313,42 @@ struct PortsWorkspace: View {
                 .keyboardShortcut("r")
                 .help("Scan again (⌘R)")
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(PillButtonStyle())
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.vertical, 11)
+        .background(alignment: .top) { Brand.wash.frame(height: 90) }
     }
 
     @ViewBuilder
     private func firewall(_ state: Bool?) -> some View {
         switch state {
         case true?:
-            Label("Firewall on", systemImage: "checkmark.shield").font(.callout).foregroundStyle(.green)
+            pill("Firewall on", symbol: "checkmark.shield.fill", tint: Tone.good)
         case false?:
-            Label("Firewall off", systemImage: "xmark.shield").font(.callout).foregroundStyle(.red)
+            pill("Firewall off", symbol: "xmark.shield.fill", tint: Tone.bad)
                 .help("Turn it on in System Settings › Network › Firewall")
         case nil:
-            Label("Firewall unknown", systemImage: "shield").font(.callout).foregroundStyle(.secondary)
+            pill("Firewall unknown", symbol: "shield", tint: .secondary)
         }
     }
 
     private func noticeBar(_ notice: Notice) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: notice.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                .foregroundStyle(notice.isError ? Color.orange : Color.green)
-            Text(notice.text).font(.callout).textSelection(.enabled)
-            Spacer(minLength: 0)
-            IconButton(symbol: "xmark", help: "Dismiss") { self.notice = nil }
-        }
+        NoticeBanner(
+            message: notice.text, tone: notice.isError ? Tone.warn : Tone.good,
+            symbol: notice.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
+        ) { self.notice = nil }
         .padding(.horizontal, 16)
-        .padding(.vertical, 7)
-        .background((notice.isError ? Color.orange : Color.green).opacity(0.1))
+        .padding(.vertical, 8)
+    }
+
+    private func pill(_ text: String, symbol: String, tint: Color) -> some View {
+        Label(text, systemImage: symbol)
+            .labelStyle(TightLabelStyle())
+            .font(.system(size: 11.5, weight: .medium))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(tint.opacity(0.13), in: Capsule())
     }
 
     private func tiles(_ scan: NetworkScan) -> some View {
@@ -347,16 +356,16 @@ struct PortsWorkspace: View {
         let alerts = scan.outgoing.filter(\.hasAlert).count
         return HStack(spacing: 10) {
             Tile(symbol: "exclamationmark.triangle.fill", count: scan.programs.filter { $0.risk == .high }.count,
-                 label: "high risk", color: .red)
+                 label: "high risk", color: Tone.bad)
             Tile(symbol: "dot.radiowaves.left.and.right", count: scan.programs.filter { $0.exposure != .loopback }.count,
-                 label: "open to a network", color: .orange)
-            Tile(symbol: "clock", count: scan.programs.filter { PortScan.isStale($0, now: now) }.count,
-                 label: "running over a day", color: .orange)
+                 label: "open to a network", color: Tone.warn)
+            Tile(symbol: "clock.fill", count: scan.programs.filter { PortScan.isStale($0, now: now) }.count,
+                 label: "running over a day", color: Tone.warn)
             Tile(symbol: "arrow.up.arrow.down", count: scan.programs.reduce(0) { $0 + $1.ports.count },
-                 label: "ports listening", color: .blue)
+                 label: "ports listening", color: Brand.tint)
             Tile(symbol: "arrow.up.right", count: scan.outgoing.count,
                  label: alerts > 0 ? "talking out · \(alerts) flagged" : "programs talking out",
-                 color: alerts > 0 ? .red : .blue)
+                 color: alerts > 0 ? Tone.bad : Brand.tint)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -497,10 +506,10 @@ struct PortsWorkspace: View {
             if !foldedSet.contains("outgoing") {
                 HStack(spacing: 4) {
                     if alerts.isEmpty {
-                        Label("Nothing suspicious", systemImage: "checkmark.circle").foregroundStyle(.green)
+                        Label("Nothing suspicious", systemImage: "checkmark.circle").foregroundStyle(Tone.good)
                     } else {
                         Label("\(alerts.count) " + (alerts.count == 1 ? "program needs" : "programs need") + " a look",
-                              systemImage: "flag.fill").foregroundStyle(.red)
+                              systemImage: "flag.fill").foregroundStyle(Tone.bad)
                     }
                     Text((noted.isEmpty ? "" : "· \(noted.count) with notes ") + "· checked every 30s, kept for a day")
                         .foregroundStyle(.secondary)
@@ -512,9 +521,7 @@ struct PortsWorkspace: View {
                     Button(showsAllTalkers ? "Show fewer" : "\(talkers.count - shown.count) more programs") {
                         showsAllTalkers.toggle()
                     }
-                    .buttonStyle(.borderless)
-                    .controlSize(.small)
-                    .padding(.horizontal, 2)
+                    .buttonStyle(QuietButtonStyle())
                 }
             }
         }
@@ -558,20 +565,23 @@ private struct Tile: View {
     let color: Color
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-                Image(systemName: symbol)
-                    .foregroundStyle(count > 0 ? color : Color.secondary.opacity(0.5))
-                    .frame(width: 18)
-                Text(String(count)).font(.title2.weight(.semibold)).monospacedDigit()
+        let tint = count > 0 ? color : Tone.idle
+        HStack(spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 32, height: 32)
+                .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            VStack(alignment: .leading, spacing: 0) {
+                Text(String(count)).font(.system(size: 20, weight: .semibold, design: .rounded)).monospacedDigit()
+                    .contentTransition(.numericText())
+                Text(label).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
             }
-            Text(label).font(.caption).foregroundStyle(.secondary).lineLimit(1)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(SkyEyeSurface.card, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.07)))
+        .skyCard()
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(count) \(label)")
     }
@@ -599,20 +609,18 @@ private struct ProgramRow: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 7) {
                 Circle().fill(program.risk.color).frame(width: 8, height: 8)
+                    .background(Circle().fill(program.risk.color.opacity(program.risk == .info ? 0 : 0.22)).scaleEffect(1.8))
+                    .frame(width: 14)
                 Text(portsLabel(program)).font(.system(size: 12, weight: .semibold, design: .monospaced))
-                Text(program.name).font(.system(size: 13)).lineLimit(1)
+                Text(program.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
                 if let service = program.service {
-                    Text(service)
-                        .font(.caption2.weight(.medium))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(Color.accentColor.opacity(0.14), in: Capsule())
+                    Chip(text: service, tint: Brand.tint)
                         .help(program.managed ? "Started by SkyEye as the service \(service)" : "Watched by SkyEye as the service \(service)")
                 }
                 Spacer(minLength: 8)
                 Text(uptimeLabel(now.timeIntervalSince(program.startedAt)))
                     .font(.caption).monospacedDigit()
-                    .foregroundStyle(isStale ? Color.orange : Color.secondary)
+                    .foregroundStyle(isStale ? Tone.warn : Color.secondary)
                     .help(isStale ? "Running for more than a day" : "")
             }
             Text(meta).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
@@ -626,14 +634,14 @@ private struct ProgramRow: View {
             }
             actions
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(isSelected ? Color.accentColor.opacity(0.1) : SkyEyeSurface.card, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(
-            isSelected ? Color.accentColor.opacity(0.7) : Color.primary.opacity(0.07), lineWidth: isSelected ? 1.5 : 1
-        ))
-        .contentShape(RoundedRectangle(cornerRadius: 10))
+        .skyCard(stroke: isSelected ? Brand.tint : SkyEyeSurface.hairline, lineWidth: isSelected ? 1.5 : 1)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Brand.tint.opacity(isSelected ? 0.18 : 0)).blur(radius: 6)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 12))
         .onTapGesture(perform: select)
         .accessibilityElement(children: .contain)
     }
@@ -647,12 +655,12 @@ private struct ProgramRow: View {
                 Text(verbatim: program.managed && program.service != nil
                      ? "Stop the service \(program.service!)?"
                      : "Stop \(program.name)? Ends pid \(program.stopPids.map(String.init).joined(separator: ", ")).")
-                    .font(.caption).foregroundStyle(.orange)
+                    .font(.caption).foregroundStyle(Tone.warn)
                 Button("Stop it", role: .destructive, action: stop)
                 Button("Cancel", action: cancel)
             }
-            .controlSize(.small)
-            .padding(.top, 2)
+            .buttonStyle(PillButtonStyle())
+            .padding(.top, 3)
         } else {
             let url = PortScan.openURL(for: program)
             let folder = program.folder.flatMap { $0 == "/" ? nil : $0 }
@@ -674,10 +682,9 @@ private struct ProgramRow: View {
                         Button(action: askStop) { Label("Stop", systemImage: "stop.fill") }
                     }
                 }
-                .buttonStyle(.borderless)
-                .controlSize(.small)
-                .font(.caption)
-                .padding(.top, 2)
+                .buttonStyle(QuietButtonStyle())
+                .padding(.top, 3)
+                .padding(.leading, -7)
             }
         }
     }
@@ -694,9 +701,9 @@ private struct TalkerRow: View {
     private var signature: (text: String, color: Color) {
         switch talker.signer {
         case nil: ("signature not checked", .secondary)
-        case "unsigned"?: ("not signed", .red)
-        case "ad-hoc"?: ("ad-hoc signed", .orange)
-        case Outgoing.missingFile?: ("file no longer on disk", .orange)
+        case "unsigned"?: ("not signed", Tone.bad)
+        case "ad-hoc"?: ("ad-hoc signed", Tone.warn)
+        case Outgoing.missingFile?: ("file no longer on disk", Tone.warn)
         case let signer?: ("signed by " + signer, .secondary)
         }
     }
@@ -705,9 +712,9 @@ private struct TalkerRow: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 7) {
                 if talker.hasAlert {
-                    Image(systemName: "flag.fill").font(.system(size: 9)).foregroundStyle(.red)
+                    Image(systemName: "flag.fill").font(.system(size: 9)).foregroundStyle(Tone.bad).frame(width: 14)
                 } else {
-                    Circle().fill(talker.flags.isEmpty ? Color.secondary.opacity(0.5) : Color.orange).frame(width: 8, height: 8)
+                    Circle().fill(talker.flags.isEmpty ? Tone.idle : Tone.warn).frame(width: 8, height: 8).frame(width: 14)
                 }
                 Text(talker.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
                 Spacer(minLength: 8)
@@ -725,7 +732,7 @@ private struct TalkerRow: View {
                 Label(flag.text, systemImage: flag.level == .alert ? "flag.fill" : "circle.fill")
                     .labelStyle(FlagLabelStyle())
                     .font(.caption)
-                    .foregroundStyle(flag.level == .alert ? Color.red : Color.secondary)
+                    .foregroundStyle(flag.level == .alert ? Tone.bad : Color.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if !talker.earlier.isEmpty {
@@ -733,13 +740,10 @@ private struct TalkerRow: View {
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(SkyEyeSurface.card, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(
-            talker.hasAlert ? Color.red.opacity(0.5) : Color.primary.opacity(0.07)
-        ))
+        .skyCard(stroke: talker.hasAlert ? Tone.bad.opacity(0.55) : SkyEyeSurface.hairline)
     }
 }
 

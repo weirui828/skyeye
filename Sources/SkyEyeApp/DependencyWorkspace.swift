@@ -17,10 +17,12 @@ final class CanvasWindowController {
             )
             window.title = "SkyEye — Dependency Canvas"
             window.isReleasedWhenClosed = false
-            window.contentView = NSHostingView(rootView: DependencyWorkspace().environmentObject(manager))
+            window.contentView = NSHostingView(
+                rootView: DependencyWorkspace().environmentObject(manager).defaultAppStorage(Preferences.store)
+            )
             window.contentMinSize = NSSize(width: 800, height: 520)
-            window.setFrameAutosaveName("SkyEyeDependencyCanvas")
             window.center()
+            if !Preferences.isCustomHome { window.setFrameAutosaveName("SkyEyeDependencyCanvas") }
             self.window = window
         }
         NSApp.activate(ignoringOtherApps: true)
@@ -54,8 +56,17 @@ struct DependencyWorkspace: View {
     @GestureState private var connectionDrag: ConnectionDrag?
     @State private var confirmStop: String?
     @State private var stopNames = Set<String>()
-    private let cardWidth: CGFloat = 268
-    private let cardHeight: CGFloat = 114
+    /// The size of the canvas, and whether the user has moved or zoomed it.
+    @State private var viewport = CGSize.zero
+    @State private var userMovedView = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private let cardWidth: CGFloat = 296
+    private let cardHeight: CGFloat = 88
+    /// Distance between rows and between columns of the automatic layout.
+    private let rowPitch: CGFloat = 196
+    private let columnPitch: CGFloat = 336
+    /// Where the connector sits on a card, from the card's top-left corner.
+    private var connectorOffset: CGSize { CGSize(width: cardWidth - 21, height: 16) }
 
     private var topology: [String] {
         manager.config.services.map { $0.name + ":" + $0.dependencies.joined(separator: ",") }
@@ -64,27 +75,19 @@ struct DependencyWorkspace: View {
     var body: some View {
         VStack(spacing: 0) {
             toolbar
-            Divider()
+            Divider().opacity(0.7)
             if let error {
                 ErrorBanner(message: error) { self.error = nil }
             } else if let loadError = manager.loadError ?? manager.autoStartError {
                 ErrorBanner(message: loadError) { manager.dismissAutoStartError() }
             }
-            if let source = connectionSource {
-                HStack {
-                    Text("Select the service that depends on \(source)")
-                    Spacer()
-                    Button("Cancel") { connectionSource = nil }
-                }
-                .padding(10)
-                .background(Color.accentColor.opacity(0.08))
-            }
             GeometryReader { geometry in
                 ZStack(alignment: .topLeading) {
-                    SkyEyeSurface.background
+                    grid
                         .contentShape(Rectangle())
                         .gesture(DragGesture().onChanged { value in
                             if panOrigin == nil { panOrigin = pan }
+                            userMovedView = true
                             pan = CGSize(width: panOrigin!.width + value.translation.width,
                                          height: panOrigin!.height + value.translation.height)
                         }.onEnded { _ in panOrigin = nil })
@@ -98,12 +101,14 @@ struct DependencyWorkspace: View {
                             .position(viewportPoint(center(of: snapshot.service.name)))
                     }
                     if manager.snapshots.isEmpty {
-                        ContentUnavailableView {
-                            Label("No services yet", systemImage: "square.stack.3d.up")
-                        } description: {
-                            Text("Add services, then connect their dependencies.")
-                        } actions: {
-                            Button("Add service") { route = .edit(nil) }
+                        VStack(spacing: 10) {
+                            BrandMark(size: 56)
+                            Text("Nothing to connect yet").font(.title3.weight(.semibold)).padding(.top, 4)
+                            Text("Add services, then draw a line from each one to the services that need it.")
+                                .foregroundStyle(.secondary)
+                            Button { route = .edit(nil) } label: { Label("Add a service", systemImage: "plus") }
+                                .buttonStyle(PillButtonStyle(prominent: true))
+                                .padding(.top, 2)
                         }
                         .frame(width: geometry.size.width, height: geometry.size.height)
                     }
@@ -112,39 +117,64 @@ struct DependencyWorkspace: View {
                 .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
                 .coordinateSpace(name: "dependencyViewport")
                 .clipped()
-                .overlay(alignment: .bottomLeading) {
-                    HStack(spacing: 6) {
-                        Button { changeZoom(zoom / 1.2, viewport: geometry.size) } label: {
-                            Image(systemName: "minus.magnifyingglass")
-                        }.help("Zoom out")
-                        Text(zoom, format: .percent.precision(.fractionLength(0)))
-                            .font(.caption).monospacedDigit().frame(width: 42)
-                        Button { changeZoom(zoom * 1.2, viewport: geometry.size) } label: {
-                            Image(systemName: "plus.magnifyingglass")
-                        }.help("Zoom in")
-                        Button("Fit") { fit(in: geometry.size) }
+                .overlay(alignment: .top) {
+                    if let source = connectionSource {
+                        HStack(spacing: 10) {
+                            Image(systemName: "link").foregroundStyle(Brand.tint)
+                            Text("Now select the service that needs \(source)").font(.callout.weight(.medium))
+                            Button("Cancel") { connectionSource = nil }.buttonStyle(PillButtonStyle())
+                        }
+                        .padding(.leading, 14)
+                        .padding(.trailing, 6)
+                        .padding(.vertical, 6)
+                        .background(.regularMaterial, in: Capsule())
+                        .overlay(Capsule().strokeBorder(Brand.tint.opacity(0.5)))
+                        .shadow(color: .black.opacity(0.12), radius: 10, y: 3)
+                        .padding(.top, 14)
+                        .transition(.move(edge: .top).combined(with: .opacity))
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .padding(8)
-                    .background(SkyEyeSurface.card, in: RoundedRectangle(cornerRadius: 10))
+                }
+                .animation(.easeOut(duration: 0.18), value: connectionSource)
+                .overlay(alignment: .bottomLeading) {
+                    HStack(spacing: 2) {
+                        IconButton(symbol: "minus", help: "Zoom out", size: 26) { changeZoom(zoom / 1.2, viewport: geometry.size) }
+                        Text(zoom, format: .percent.precision(.fractionLength(0)))
+                            .font(.system(size: 11, weight: .medium)).monospacedDigit().frame(width: 40)
+                        IconButton(symbol: "plus", help: "Zoom in", size: 26) { changeZoom(zoom * 1.2, viewport: geometry.size) }
+                        Divider().frame(height: 14).padding(.horizontal, 3)
+                        IconButton(symbol: "arrow.up.left.and.arrow.down.right", help: "Fit everything in the window", size: 26) {
+                            withAnimation(.easeInOut(duration: 0.25)) { fit(in: geometry.size) }
+                            userMovedView = false
+                        }
+                    }
+                    .padding(4)
+                    .background(.regularMaterial, in: Capsule())
+                    .overlay(Capsule().strokeBorder(SkyEyeSurface.hairline))
+                    .shadow(color: .black.opacity(0.10), radius: 8, y: 2)
                     .padding(16)
                 }
+                .overlay(alignment: .bottomTrailing) { legend.padding(16) }
+                .onAppear {
+                    viewport = geometry.size
+                    if !userMovedView { fit(in: geometry.size) }
+                }
+                .onChange(of: geometry.size) { _, size in
+                    viewport = size
+                    if !userMovedView { fit(in: size) }
+                }
             }
-            Divider()
-            HStack {
-                Text("Dependent ↑ dependency")
-                Spacer()
-                Text("Drag the canvas to pan · Drag card headers to move · Drag a connector to link")
-            }
-            .font(.caption).foregroundStyle(.secondary).padding(10)
         }
         .frame(minWidth: 800, minHeight: 520)
         .background(SkyEyeSurface.background)
         .onAppear {
             positions = (try? JSONDecoder().decode([String: NodePoint].self, from: savedPositions)) ?? [:]
+            if layoutVersion == 2, let levels = try? ServiceGraph.levels(manager.config.services) {
+                // Version 2 measured rows from the top row. Version 3 measures them from the bottom row.
+                let shift = Double(levels.values.max() ?? 0) * 214
+                for name in positions.keys { positions[name]!.y -= shift }
+            }
             arrange(all: layoutVersion < 2)
-            layoutVersion = 2
+            layoutVersion = 3
         }
         .onChange(of: topology) { old, new in
             // Reflow only nodes whose prerequisites changed and their downstream dependents.
@@ -160,7 +190,10 @@ struct DependencyWorkspace: View {
                 }
             }
             for name in affected { positions[name] = nil }
-            withAnimation(.easeInOut(duration: 0.25)) { arrange(all: false) }
+            withAnimation(.easeInOut(duration: 0.25)) {
+                arrange(all: false)
+                if !userMovedView, viewport != .zero { fit(in: viewport) }
+            }
         }
         .sheet(isPresented: Binding(get: { route != .list }, set: { if !$0 { route = .list } })) {
             Group {
@@ -174,7 +207,9 @@ struct DependencyWorkspace: View {
             }
             .environmentObject(manager)
             .frame(width: 480)
-            .padding(.vertical, 8)
+            .padding(.vertical, 4)
+            .background(alignment: .top) { Brand.wash.frame(height: 140) }
+            .background(SkyEyeSurface.background)
         }
         .confirmationDialog("Stop \(confirmStop ?? "service")?", isPresented: Binding(
             get: { confirmStop != nil }, set: { if !$0 { confirmStop = nil } }
@@ -189,15 +224,19 @@ struct DependencyWorkspace: View {
     }
 
     private var toolbar: some View {
-        HStack(spacing: 14) {
-            Text("SkyEye").font(.headline)
-            Text("\(manager.snapshots.filter { $0.state == .running || $0.state == .external }.count)/\(manager.snapshots.count) up")
-                .font(.caption).foregroundStyle(.secondary)
+        let up = manager.snapshots.filter { $0.state == .running || $0.state == .external }.count
+        let total = manager.snapshots.count
+        return HStack(spacing: 10) {
+            BrandMark(size: 26)
+            Text("Dependencies").font(.system(size: 15, weight: .semibold))
+            if total > 0 {
+                Chip(text: up == total ? "All \(total) running" : "\(up) of \(total) running",
+                     tint: up == total ? Tone.good : .secondary)
+            }
             ResourceUsageStatus()
             Spacer()
-            Button { route = .edit(nil) } label: { Label("Add service", systemImage: "plus") }
             if !groups.isEmpty {
-                Menu("Groups") {
+                Menu {
                     ForEach(groups, id: \.self) { group in
                         Menu(group) {
                             Button("Start group") { groupAction(.start, group: group) }
@@ -211,76 +250,163 @@ struct DependencyWorkspace: View {
                                 })
                         }
                     }
+                } label: {
+                    Label("Groups", systemImage: "square.stack.3d.up")
                 }
+                .menuStyle(.button)
+                .fixedSize()
+                .help("Start or stop a whole group")
             }
-            Button { withAnimation { arrange(all: true) } } label: {
-                Label("Arrange all", systemImage: "rectangle.3.group")
+            Button {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    arrange(all: true)
+                    if viewport != .zero { fit(in: viewport) }
+                    userMovedView = false
+                }
+            } label: {
+                Label("Arrange", systemImage: "rectangle.3.group")
             }
-            Button { route = .settings } label: { Image(systemName: "gearshape") }.help("Settings")
+            .help("Put every card back in its automatic place")
+            Button { route = .edit(nil) } label: { Label("Add service", systemImage: "plus") }
+                .buttonStyle(PillButtonStyle(prominent: true))
+                .keyboardShortcut("n")
+            IconButton(symbol: "gearshape", help: "Settings", size: 28, filled: true) { route = .settings }
         }
-        .buttonStyle(.borderless)
-        .padding(16)
+        .buttonStyle(PillButtonStyle())
+        .padding(.horizontal, 16)
+        .padding(.vertical, 11)
+        .background(alignment: .top) { Brand.wash.frame(height: 90) }
+    }
+
+    /// A faint grid of dots that moves and scales with the cards, so panning and zooming can be felt.
+    private var grid: some View {
+        Canvas { context, size in
+            var spacing = 28 * zoom
+            while spacing < 16 { spacing *= 2 }
+            let startX = pan.width.truncatingRemainder(dividingBy: spacing)
+            let startY = pan.height.truncatingRemainder(dividingBy: spacing)
+            var dots = Path()
+            var y = startY - spacing
+            while y < size.height + spacing {
+                var x = startX - spacing
+                while x < size.width + spacing {
+                    dots.addEllipse(in: CGRect(x: x - 1, y: y - 1, width: 2, height: 2))
+                    x += spacing
+                }
+                y += spacing
+            }
+            context.fill(dots, with: .color(.primary.opacity(0.10)))
+        }
+        .background(SkyEyeSurface.background)
+    }
+
+    private var legend: some View {
+        HStack(spacing: 12) {
+            legendItem("in use", color: Tone.good, dash: [1, 5])
+            legendItem("idle", color: Tone.idle, dash: [])
+            legendItem("dependency down", color: Tone.bad, dash: [4, 4])
+        }
+        .font(.system(size: 11))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(SkyEyeSurface.hairline))
+        .help("A line runs from a dependency up to the service that needs it.\nDrag the background to move around. Drag a card by its top to move it.\nDrag a card's link button onto the service that needs it.")
+    }
+
+    private func legendItem(_ label: String, color: Color, dash: [CGFloat]) -> some View {
+        HStack(spacing: 5) {
+            Path { path in
+                path.move(to: CGPoint(x: 1, y: 4))
+                path.addLine(to: CGPoint(x: 21, y: 4))
+            }
+            .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round, dash: dash))
+            .frame(width: 22, height: 8)
+            Text(label)
+        }
+    }
+
+    /// A stable color for a group, so its cards can be picked out across the canvas.
+    private func groupColor(_ group: String?) -> Color {
+        guard let group, !group.isEmpty else { return Tone.idle }
+        let palette: [Color] = [
+            .adaptive(light: (0.16, 0.47, 0.84), dark: (0.36, 0.60, 0.95)),
+            .adaptive(light: (0.92, 0.41, 0.20), dark: (0.96, 0.52, 0.30)),
+            .adaptive(light: (0.11, 0.69, 0.48), dark: (0.20, 0.76, 0.56)),
+            .adaptive(light: (0.38, 0.31, 0.84), dark: (0.60, 0.55, 0.96)),
+            .adaptive(light: (0.91, 0.48, 0.64), dark: (0.93, 0.50, 0.68)),
+            .adaptive(light: (0.93, 0.63, 0.0), dark: (0.95, 0.70, 0.20)),
+        ]
+        let sum = group.unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) % 9973 }
+        return palette[sum % palette.count]
     }
 
     private func node(_ snapshot: ServiceSnapshot) -> some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 7) {
-                Text(snapshot.service.group ?? "Service").lineLimit(1)
-                    .font(.caption).foregroundStyle(.secondary)
+        let name = snapshot.service.name
+        let isEnd = (connectionDrag?.source ?? connectionSource) == name || connectionTarget == name
+        return VStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Circle().fill(groupColor(snapshot.service.group)).frame(width: 7, height: 7)
+                Text(snapshot.service.group ?? "No group").lineLimit(1)
+                    .font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
                     .allowsHitTesting(false)
                 Spacer(minLength: 0)
                 if !snapshot.service.dependencies.isEmpty {
                     Menu {
-                        ForEach(snapshot.service.dependencies, id: \.self) { dependency in
-                            Button("Remove dependency: " + dependency) { unlink(dependency, from: snapshot.service.name) }
+                        Section("\(name) needs") {
+                            ForEach(snapshot.service.dependencies, id: \.self) { dependency in
+                                Button("Remove " + dependency) { unlink(dependency, from: name) }
+                            }
                         }
                     } label: {
                         Label("\(snapshot.service.dependencies.count)", systemImage: "arrow.triangle.branch")
+                            .font(.system(size: 11))
                     }
                     .menuStyle(.borderlessButton).fixedSize()
-                    .help("Dependencies; choose one to remove its link")
+                    .help("What \(name) needs. Choose one to remove its link.")
                 }
-                Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
-                    .frame(width: 24, height: 24)
-                    .contentShape(Rectangle())
+                Image(systemName: "link")
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(connectionSource == name ? Color.white : Brand.tint)
+                    .frame(width: 22, height: 22)
+                    .background(Circle().fill(connectionSource == name ? Brand.tint : Brand.tint.opacity(0.13)))
+                    .contentShape(Circle())
                     .highPriorityGesture(
-                        connectionGesture(from: snapshot.service.name)
-                            .exclusively(before: TapGesture().onEnded {
-                                selectConnector(snapshot.service.name)
-                            })
+                        connectionGesture(from: name)
+                            .exclusively(before: TapGesture().onEnded { selectConnector(name) })
                     )
-                    .accessibilityLabel("Connect " + snapshot.service.name)
+                    .accessibilityLabel("Connect " + name)
                     .accessibilityAddTraits(.isButton)
-                    .accessibilityAction { selectConnector(snapshot.service.name) }
-                .help(connectionSource.map { "\(snapshot.service.name) depends on \($0)" }
-                      ?? "Drag onto a service that depends on \(snapshot.service.name), or click to connect")
+                    .accessibilityAction { selectConnector(name) }
+                    .help(connectionSource.map { "\(name) needs \($0)" }
+                          ?? "Drag onto a service that needs \(name), or click and then click that service")
             }
-            .padding(.horizontal, 8)
-            .frame(height: 28)
+            .padding(.leading, 11)
+            .padding(.trailing, 6)
+            .frame(height: 32)
             .background {
                 Color.clear
                     .contentShape(Rectangle())
                     .gesture(DragGesture(coordinateSpace: .named("dependencyViewport")).onChanged { value in
-                        let name = snapshot.service.name
                         if dragOrigins[name] == nil { dragOrigins[name] = positions[name]?.point ?? .zero }
                         let origin = dragOrigins[name]!
                         positions[name] = NodePoint(x: origin.x + value.translation.width / zoom,
                                                     y: origin.y + value.translation.height / zoom)
-                    }.onEnded { _ in dragOrigins[snapshot.service.name] = nil; persistPositions() })
+                    }.onEnded { _ in dragOrigins[name] = nil; persistPositions() })
             }
+            Divider().opacity(0.6)
             ServiceCard(snapshot: snapshot, route: $route, onError: { error = $0 },
-                        onStop: { requestStop(snapshot.service.name) })
+                        onStop: { requestStop(name) }, style: .row, compact: true)
+                .padding(.vertical, 2)
         }
-        .padding(6)
         .frame(width: cardWidth, height: cardHeight, alignment: .top)
-        .background(SkyEyeSurface.group, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(
-            (connectionDrag?.source ?? connectionSource) == snapshot.service.name || connectionTarget == snapshot.service.name ? Color.accentColor : Color.primary.opacity(0.08),
-            lineWidth: (connectionDrag?.source ?? connectionSource) == snapshot.service.name || connectionTarget == snapshot.service.name ? 2 : 1))
+        .skyCard(radius: 14, stroke: isEnd ? Brand.tint : SkyEyeSurface.hairline, lineWidth: isEnd ? 2 : 1)
+        .shadow(color: .black.opacity(dragOrigins[name] == nil ? 0.05 : 0.16), radius: dragOrigins[name] == nil ? 5 : 14, y: 3)
         .contentShape(RoundedRectangle(cornerRadius: 14))
         .onTapGesture {
-            if let source = connectionSource, source != snapshot.service.name {
-                connect(source, to: snapshot.service.name)
+            if let source = connectionSource, source != name {
+                connect(source, to: name)
             }
         }
     }
@@ -363,57 +489,114 @@ struct DependencyWorkspace: View {
         return CGPoint(x: point.x + cardWidth / 2, y: point.y + cardHeight / 2)
     }
 
+    private enum Flow { case live, idle, broken }
+
+    private func flow(from dependency: ServiceState?, to dependent: ServiceState?) -> Flow {
+        let up: Set<ServiceState> = [.running, .external]
+        let wants: Set<ServiceState> = [.running, .starting, .unhealthy, .external]
+        guard let dependency, let dependent else { return .idle }
+        if up.contains(dependency) { return wants.contains(dependent) ? .live : .idle }
+        return wants.contains(dependent) ? .broken : .idle
+    }
+
     private var edges: some View {
-        Canvas { context, _ in
-            context.translateBy(x: pan.width, y: pan.height)
-            context.scaleBy(x: zoom, y: zoom)
-            for service in manager.config.services {
-                for dependency in service.dependencies {
-                    let from = center(of: dependency)
-                    let to = center(of: service.name)
+        let states = Dictionary(uniqueKeysWithValues: manager.snapshots.map { ($0.service.name, $0.state) })
+        let links: [(from: String, to: String, flow: Flow)] = manager.config.services.flatMap { service in
+            service.dependencies.map { ($0, service.name, flow(from: states[$0], to: states[service.name])) }
+        }
+        let moving = !reduceMotion && links.contains { $0.flow == .live }
+        return TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !moving)) { timeline in
+            Canvas { context, _ in
+                context.translateBy(x: pan.width, y: pan.height)
+                context.scaleBy(x: zoom, y: zoom)
+                let phase = CGFloat(timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1000)) * 22
+                for link in links.sorted(by: { $0.flow == .idle && $1.flow != .idle }) {
+                    let from = center(of: link.from)
+                    let to = center(of: link.to)
                     let start = CGPoint(x: from.x, y: from.y - cardHeight / 2)
-                    let end = CGPoint(x: to.x, y: to.y + cardHeight / 2 + 3)
+                    let end = CGPoint(x: to.x, y: to.y + cardHeight / 2 + 7)
                     let bend = max(45, abs(end.y - start.y) * 0.5)
                     var path = Path()
                     path.move(to: start)
                     path.addCurve(to: end, control1: CGPoint(x: start.x, y: start.y - bend),
                                   control2: CGPoint(x: end.x, y: end.y + bend))
-                    context.stroke(path, with: .color(.secondary.opacity(0.6)), lineWidth: 1.7)
+                    let color: Color
+                    switch link.flow {
+                    case .live:
+                        color = Tone.good
+                        context.stroke(path, with: .color(color.opacity(0.28)), style: StrokeStyle(lineWidth: 2.2, lineCap: .round))
+                        context.stroke(path, with: .color(color), style: StrokeStyle(
+                            lineWidth: 2.6, lineCap: .round, dash: [0.1, 11], dashPhase: moving ? -phase : 0
+                        ))
+                    case .idle:
+                        color = Tone.idle
+                        context.stroke(path, with: .color(color.opacity(0.75)), style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
+                    case .broken:
+                        color = Tone.bad
+                        context.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: 2, lineCap: .round, dash: [5, 5]))
+                    }
                     var arrow = Path()
-                    arrow.move(to: CGPoint(x: end.x - 4, y: end.y + 8))
-                    arrow.addLine(to: end)
-                    arrow.addLine(to: CGPoint(x: end.x + 4, y: end.y + 8))
-                    context.stroke(arrow, with: .color(.secondary), lineWidth: 1.7)
+                    arrow.move(to: CGPoint(x: end.x, y: end.y - 6))
+                    arrow.addLine(to: CGPoint(x: end.x - 5, y: end.y + 3))
+                    arrow.addLine(to: CGPoint(x: end.x + 5, y: end.y + 3))
+                    arrow.closeSubpath()
+                    context.fill(arrow, with: .color(color))
+                    context.fill(Path(ellipseIn: CGRect(x: start.x - 3.5, y: start.y - 3.5, width: 7, height: 7)), with: .color(color))
+                }
+                if let drag = connectionDrag {
+                    let origin = positions[drag.source]?.point ?? .zero
+                    let start = CGPoint(x: origin.x + connectorOffset.width, y: origin.y + connectorOffset.height)
+                    var preview = Path()
+                    preview.move(to: start)
+                    preview.addLine(to: drag.location)
+                    context.stroke(preview, with: .color(Brand.tint), style: StrokeStyle(lineWidth: 2, lineCap: .round, dash: [6, 5]))
+                    let marker = CGRect(x: drag.location.x - 5, y: drag.location.y - 5, width: 10, height: 10)
+                    context.fill(Path(ellipseIn: marker), with: .color(Brand.tint))
                 }
             }
-            if let drag = connectionDrag {
-                let origin = positions[drag.source]?.point ?? .zero
-                let start = CGPoint(x: origin.x + cardWidth - 26, y: origin.y + 20)
-                var preview = Path()
-                preview.move(to: start)
-                preview.addLine(to: drag.location)
-                context.stroke(preview, with: .color(.accentColor), style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
-                let marker = CGRect(x: drag.location.x - 4, y: drag.location.y - 4, width: 8, height: 8)
-                context.fill(Path(ellipseIn: marker), with: .color(.accentColor))
-            }
         }
-        .accessibilityLabel("Dependencies sit below their dependents; arrows point upward. Each service lists its prerequisites in its dependency menu.")
+        .accessibilityLabel("Dependencies sit below the services that need them; lines run upward. Each service lists what it needs in its dependency menu.")
     }
 
     private func arrange(all: Bool) {
         do {
             let levels = try ServiceGraph.levels(manager.config.services)
-            let maxLevel = levels.values.max() ?? 0
             let names = Set(manager.config.services.map(\.name))
             positions = positions.filter { names.contains($0.key) }
             if all { positions.removeAll() }
+            let dependencies = Dictionary(uniqueKeysWithValues: manager.config.services.map { ($0.name, $0.dependencies) })
             let ordered = try ServiceGraph.order(manager.config.services)
+            let needed = Set(manager.config.services.flatMap(\.dependencies))
+            let alone = Set(ordered.filter { (dependencies[$0] ?? []).isEmpty && !needed.contains($0) })
+            func isTaken(_ x: Double, _ y: Double) -> Bool {
+                positions.values.contains { abs($0.x - x) < cardWidth + 28 && abs($0.y - y) < cardHeight + 24 }
+            }
+            for name in ordered where positions[name] == nil && !alone.contains(name) {
+                let y = -Double(levels[name] ?? 0) * rowPitch
+                let below = (dependencies[name] ?? []).compactMap { positions[$0]?.x }
+                let wanted = below.isEmpty ? 0 : ((below.reduce(0, +) / Double(below.count)) / columnPitch).rounded()
+                var x = wanted * columnPitch
+                for step in 0..<200 {
+                    let offset = Double((step + 1) / 2) * (step.isMultiple(of: 2) ? -1 : 1)
+                    x = (wanted + (below.isEmpty ? Double(step) : offset)) * columnPitch
+                    if !isTaken(x, y) { break }
+                }
+                positions[name] = NodePoint(x: x, y: y)
+            }
+            let linked = positions.filter { !alone.contains($0.key) }.values
+            let left = linked.map(\.x).min() ?? 0
+            let perRow = max(3, Int((((linked.map(\.x).max() ?? 0) - left) / columnPitch).rounded()) + 1)
+            let top = linked.isEmpty ? 0 : cardHeight + 64
             for name in ordered where positions[name] == nil {
-                var x = 0.0
-                let y = Double(maxLevel - (levels[name] ?? 0)) * (cardHeight + 100)
-                while positions.values.contains(where: {
-                    abs($0.x - x) < cardWidth + 28 && abs($0.y - y) < cardHeight + 24
-                }) { x += cardWidth + 60 }
+                var slot = 0
+                var x = left
+                var y = top
+                while slot < 400 {
+                    x = left + Double(slot % perRow) * columnPitch
+                    y = top + Double(slot / perRow) * (cardHeight + 30)
+                    if !isTaken(x, y) { break }
+                    slot += 1
+                }
                 positions[name] = NodePoint(x: x, y: y)
             }
             persistPositions()
@@ -425,6 +608,7 @@ struct DependencyWorkspace: View {
     }
 
     private func changeZoom(_ value: CGFloat, viewport: CGSize) {
+        userMovedView = true
         let next = min(1.6, max(0.1, value))
         let ratio = next / zoom
         pan = CGSize(width: viewport.width / 2 - (viewport.width / 2 - pan.width) * ratio,
