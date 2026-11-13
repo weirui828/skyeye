@@ -31,9 +31,10 @@ public struct GroupUsage: Sendable {
         var pending = [root]
         while let parent = pending.popLast() {
             var children = [pid_t](repeating: 0, count: 1024)
-            let bytes = proc_listchildpids(parent, &children, Int32(children.count * MemoryLayout<pid_t>.size))
-            guard bytes > 0 else { continue }
-            for child in children.prefix(Int(bytes) / MemoryLayout<pid_t>.size) where child > 0 {
+            // Unlike proc_listpids, proc_listchildpids returns the number of pids, not bytes.
+            let count = proc_listchildpids(parent, &children, Int32(children.count * MemoryLayout<pid_t>.size))
+            guard count > 0 else { continue }
+            for child in children.prefix(Int(count)) where child > 0 {
                 if result.insert(child).inserted { pending.append(child) }
             }
         }

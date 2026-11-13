@@ -96,6 +96,31 @@ final class ProcessTests: XCTestCase {
         Thread.sleep(forTimeInterval: 0.2)
         XCTAssertEqual(kill(-process.pid, 0), -1, "no process left in the group")
     }
+
+    func testProcessTreeIncludesChildren() throws {
+        let shell = Process()
+        shell.executableURL = URL(fileURLWithPath: "/bin/sh")
+        // "; true" keeps sh from exec'ing sleep in place, so sleep is a real child.
+        shell.arguments = ["-c", "/bin/sleep 30; true"]
+        try shell.run()
+        let root = shell.processIdentifier
+        var child: pid_t?
+        defer {
+            // The child first: killing the shell alone would orphan it.
+            if let child { kill(child, SIGKILL) }
+            shell.terminate()
+            shell.waitUntilExit()
+        }
+
+        let deadline = Date().addingTimeInterval(5)
+        while child == nil, Date() < deadline {
+            child = childPIDs(of: root).first
+            if child == nil { Thread.sleep(forTimeInterval: 0.05) }
+        }
+        let sleeper = try XCTUnwrap(child, "the shell never started its child")
+
+        XCTAssertEqual(GroupUsage.processTree(root: root), [root, sleeper])
+    }
 }
 
 @MainActor
@@ -523,6 +548,19 @@ final class ManagerTests: XCTestCase {
 
         let names = manager.snapshots.map(\.service.name)
         XCTAssertEqual(names, ["alpha", "middle", "zebra"])
+    }
+}
+
+/// Direct children of `parent`, found by reading every process's parent pid
+/// rather than through proc_listchildpids, which is what processTree uses.
+func childPIDs(of parent: pid_t) -> [pid_t] {
+    var pids = [pid_t](repeating: 0, count: Int(proc_listallpids(nil, 0)) + 64)
+    _ = proc_listallpids(&pids, Int32(pids.count * MemoryLayout<pid_t>.size))
+    return pids.filter { pid in
+        guard pid > 0 else { return false }
+        var info = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        return proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size && info.pbi_ppid == UInt32(parent)
     }
 }
 
