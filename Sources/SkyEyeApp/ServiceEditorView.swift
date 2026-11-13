@@ -87,20 +87,18 @@ struct ServiceEditorView: View {
                     }
                 }
             }
-            MenuDivider()
             if let error {
                 ErrorBanner(message: error) { self.error = nil }
-                MenuDivider()
             }
             if needsApproval {
-                Text("Waiting for approval — saving changes won't approve this command.")
+                Label("Waiting for approval — saving changes won't approve this command.", systemImage: "checkmark.shield.fill")
+                    .labelStyle(TightLabelStyle(spacing: 6))
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Tone.warn)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                MenuDivider()
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 6)
             }
             Picker("Service settings category", selection: $tab) {
                 ForEach(Tab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
@@ -128,7 +126,7 @@ struct ServiceEditorView: View {
                 .padding(12)
             }
             .frame(height: 380)
-            MenuDivider()
+            Divider().opacity(0.6)
             footer
         }
         .confirmationDialog("Discard changes?", isPresented: $showDiscardDialog, titleVisibility: .visible) {
@@ -142,8 +140,7 @@ struct ServiceEditorView: View {
     // MARK: Sections
 
     private var basics: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SectionTitle(text: "Basics")
+        SettingsCard(title: "Basics") {
             field("Name", "api", $name, disabled: ownsProcess)
             if ownsProcess {
                 Text("Stop the service to rename it.")
@@ -163,25 +160,23 @@ struct ServiceEditorView: View {
     }
 
     private var network: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SectionTitle(text: "Network")
+        SettingsCard(title: "Network") {
             field("Port (optional)", "3000", $port)
             if let owner = duplicatePortOwner {
                 Label("Port \(trimmedPort) is already used by '\(owner)'.", systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Tone.warn)
             }
         }
     }
 
     private var workingDirectory: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SectionTitle(text: "Working directory")
+        SettingsCard(title: "Working directory") {
             HStack(spacing: 6) {
                 TextField("~/dev/my-project", text: $directory)
                     .textFieldStyle(.roundedBorder)
                 Button("Choose…") { chooseDirectory() }
-                    .controlSize(.small)
+                    .buttonStyle(PillButtonStyle())
                     .help("Choose the folder the command runs in")
                     .accessibilityLabel("Choose working directory")
             }
@@ -197,8 +192,7 @@ struct ServiceEditorView: View {
     }
 
     private var groupSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SectionTitle(text: "Group")
+        SettingsCard(title: "Group") {
             HStack(spacing: 6) {
                 TextField("my-project", text: $group)
                     .textFieldStyle(.roundedBorder)
@@ -226,8 +220,7 @@ struct ServiceEditorView: View {
     }
 
     private var dependencySection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SectionTitle(text: "Depends on")
+        SettingsCard(title: "Depends on") {
             let candidates = manager.config.services.filter { $0.name != original?.name }.sorted {
                 $0.name.localizedStandardCompare($1.name) == .orderedAscending
             }
@@ -251,8 +244,7 @@ struct ServiceEditorView: View {
     }
 
     private var healthSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SectionTitle(text: "Readiness")
+        SettingsCard(title: "Readiness") {
             field("Health check (optional)", "/health", $healthPath)
             Text("Use a path on this service's port, or a full HTTP URL. SkyEye waits for a successful response before marking the service ready or starting its dependents.")
                 .font(.caption).foregroundStyle(.secondary)
@@ -262,8 +254,7 @@ struct ServiceEditorView: View {
     }
 
     private var environmentSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SectionTitle(text: "Environment variables (\(envLineCount))")
+        SettingsCard(title: "Environment variables (\(envLineCount))") {
             environmentEditor
             Text("One KEY=VALUE per line. These values are added to the service's shell environment.")
                 .font(.caption).foregroundStyle(.secondary)
@@ -287,15 +278,16 @@ struct ServiceEditorView: View {
                     .allowsHitTesting(false)
             }
         }
-        .background(RoundedRectangle(cornerRadius: 5).fill(Color(nsColor: .controlBackgroundColor)))
-        .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.primary.opacity(0.15)))
+        .skyWell(radius: 8)
     }
 
     private var behaviorSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SectionTitle(text: "Behavior")
-            Toggle("Restart automatically if it crashes", isOn: $autoRestart)
-                .toggleStyle(.switch)
+        SettingsCard(title: "Behavior") {
+            Toggle(isOn: $autoRestart) {
+                Text("Restart automatically if it crashes").frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .toggleStyle(.switch)
+            .controlSize(.small)
         }
     }
 
@@ -308,11 +300,13 @@ struct ServiceEditorView: View {
                 Button("Save & Restart") { save(restartAfterSaving: true) }
                     .help("Save the changes, then restart the service")
             }
-            Button("Save") { save() }
+            Button { save() } label: { Text("Save").padding(.horizontal, 8) }
                 .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PillButtonStyle(prominent: true))
         }
-        .padding(10)
+        .buttonStyle(PillButtonStyle())
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
     }
 
     private func field(

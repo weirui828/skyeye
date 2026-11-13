@@ -2,7 +2,7 @@
    time one blue ramp, projects and services eight categorical slots. */
 :root {
   color-scheme: light dark;
-  --page: #fbfbfb;
+  --page: #f2f3f6;
   --card: #ffffff;
   --edge: rgba(0, 0, 0, 0.07);
   --ink: #0b0b0b;
@@ -28,8 +28,8 @@
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --page: #1f1f1f;
-    --card: #2b2b2b;
+    --page: #1b1c20;
+    --card: #27292e;
     --edge: rgba(255, 255, 255, 0.08);
     --ink: #f0efec;
     --muted: #a3a29b;
