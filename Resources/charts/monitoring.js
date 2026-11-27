@@ -55,7 +55,7 @@ export function layoutActivity(graph, width, height) {
   const externalIDs = new Set(external.flatMap(l => [l.from, l.to]))
   const localIDs = new Set(internal.flatMap(l => [l.from, l.to]))
   const split = external.length > 0 && internal.length > 0
-  const nodes = [], arcs = [], captions = [], circles = [], summaries = []
+  const nodes = [], arcs = [], captions = [], circles = [], summaries = [], cards = []
   const loads = new Map()
   for (const link of graph.links) for (const id of [link.from, link.to]) loads.set(id, (loads.get(id) ?? 0) + total(link))
   // The internal ring sits top right; place it first so the external semicircle can keep clear of it.
@@ -66,6 +66,11 @@ export function layoutActivity(graph, width, height) {
     // On a narrow canvas the ring keeps its labels for hover, so it can sit close to the edge.
     const quiet = split && (count > 8 || width < 700)
     ring = { r, quiet, cx: split ? width - r - (quiet ? 40 : 118) : width / 2, cy: split ? r + 62 : height / 2 - 5 }
+    // Beside the semicircle the ring sits on its own card, padded for its labels.
+    if (split) {
+      const pad = quiet ? 24 : 104
+      ring.card = { x: ring.cx - r - pad, y: ring.cy - r - 44, width: 2 * (r + pad), height: 2 * r + 72 }
+    }
   }
   if (external.length) {
     let r = Math.min(height * 0.39, split ? width * 0.25 : width / 2 - 150)
@@ -74,7 +79,7 @@ export function layoutActivity(graph, width, height) {
     // External labels reach about 110px right of their node, and the ring's left labels about 100px left of it.
     // Where those bands share rows, slide the semicircle down, then shrink it, until they clear.
     if (ring && split) {
-      const bottom = ring.cy + ring.r + 24, left = ring.cx - ring.r - (ring.quiet ? 16 : 100)
+      const bottom = ring.card.y + ring.card.height, left = ring.card.x + 8
       const reach = () => {
         const dy = Math.max(0, cy - bottom)
         return dy >= r ? -Infinity : cx + Math.sqrt(r * r - dy * dy) + 110
@@ -103,10 +108,11 @@ export function layoutActivity(graph, width, height) {
         cx, cy, right: Math.cos(angle) >= 0, compact: split, quiet: ring.quiet, load: loads.get(n.id) ?? 0 })
     })
     circles.push({ cx, cy, r })
+    if (ring.card) cards.push(ring.card)
     captions.push({ text: 'Inside this Mac', x: cx, y: cy - r - 22 })
     summaries.push({ text: `${internal.reduce((sum, l) => sum + l.connections, 0)} connections`, x: cx, y: cy + 4 })
   }
-  return { nodes, arcs, circles, captions, summaries }
+  return { nodes, arcs, circles, captions, summaries, cards }
 }
 
 export function mountMonitoring(root) {
@@ -117,9 +123,9 @@ export function mountMonitoring(root) {
   panel.dataset.palette = 'pantone'
   panel.innerHTML = `
     <div class="monitor-metrics">
-      <div><span class="metric-label">Download</span><strong data-metric="received">—</strong><svg class="metric-spark" data-spark="received" viewBox="0 0 72 18" preserveAspectRatio="none" aria-hidden="true"><path></path></svg></div>
-      <div><span class="metric-label">Upload</span><strong data-metric="sent">—</strong><svg class="metric-spark" data-spark="sent" viewBox="0 0 72 18" preserveAspectRatio="none" aria-hidden="true"><path></path></svg></div>
-      <div><span class="metric-label">Inside this Mac</span><strong data-metric="internalRate">—</strong><svg class="metric-spark" data-spark="internalRate" viewBox="0 0 72 18" preserveAspectRatio="none" aria-hidden="true"><path></path></svg></div>
+      <div><span class="metric-label">Download</span><strong data-metric="received">—</strong><svg class="metric-spark" data-spark="received" viewBox="0 0 72 18" preserveAspectRatio="none" aria-hidden="true"><path class="spark-area"></path><path class="spark-line"></path></svg></div>
+      <div><span class="metric-label">Upload</span><strong data-metric="sent">—</strong><svg class="metric-spark" data-spark="sent" viewBox="0 0 72 18" preserveAspectRatio="none" aria-hidden="true"><path class="spark-area"></path><path class="spark-line"></path></svg></div>
+      <div><span class="metric-label">Inside this Mac</span><strong data-metric="internalRate">—</strong><svg class="metric-spark" data-spark="internalRate" viewBox="0 0 72 18" preserveAspectRatio="none" aria-hidden="true"><path class="spark-area"></path><path class="spark-line"></path></svg></div>
       <div class="metric-count"><span class="metric-label">Connections</span><strong data-metric="connections">—</strong></div>
     </div>
     <div class="monitor-controls">
@@ -134,7 +140,8 @@ export function mountMonitoring(root) {
       <div class="monitor-canvas"><div class="stage-heading"><small></small></div><svg class="monitor-map" role="img" aria-label="Live network connections"></svg>
         <canvas class="monitor-globe" role="img" aria-label="3D network sphere" tabindex="0" hidden></canvas>
         <div class="globe-controls" hidden><button data-orbit aria-pressed="true">Rotate</button><button data-reset>Reset</button></div>
-        <p class="monitor-empty">Reading network counters…</p>
+        <div class="monitor-empty"><i class="empty-pulse" aria-hidden="true"></i><b>Reading network counters…</b><span>The first sample sets a baseline. Rates appear a second later.</span><button class="empty-action" hidden>Clear search</button></div>
+        <div class="monitor-paused" hidden>Paused · showing the last sample</div>
         <div class="monitor-legend"><span class="legend-local">Inside this Mac</span><span class="legend-remote">External</span><span class="monitor-freshness">Waiting for samples</span></div>
       </div>
       <aside class="monitor-detail"><div class="detail-heading"></div><div class="detail-content"></div></aside>
@@ -142,6 +149,7 @@ export function mountMonitoring(root) {
   root.append(panel)
   const map = d3.select(panel.querySelector('.monitor-map'))
   const scene = map.append('g')
+  const cardLayer = scene.append('g').attr('class', 'monitor-cards')
   const guides = scene.append('g').attr('class', 'monitor-guides')
   const paths = scene.append('g')
   const particles = scene.append('g').attr('class', 'monitor-particles').attr('aria-hidden', 'true')
@@ -153,6 +161,7 @@ export function mountMonitoring(root) {
   let lastFreshness = null
   const positions = new Map()
   let trend = [], showQuiet = false
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
   const chosen = () => selected ?? hovered
   const fresh = () => sample && sample.active !== false && Date.now() - sample.at < 5000
   const visibleRate = value => fresh() && !sample.warmingUp ? value : 0
@@ -171,75 +180,126 @@ export function mountMonitoring(root) {
     return el
   }
 
+  // The panel is rebuilt only when what it lists changes; each sample then updates its numbers in place,
+  // so hover, focus and scroll position survive the one-second refresh.
+  let detailKey = '', detailRows = new Map()
+  const shownRate = value => fresh() && !sample.warmingUp ? rate(value) : '—'
+
+  function programRows(names) {
+    const groups = new Map()
+    for (const l of projected.links) {
+      const group = groups.get(l.from) ?? { id: l.from, external: 0, local: 0, connections: 0, peers: new Map() }
+      group[l.local ? 'local' : 'external'] += total(l)
+      group.connections += l.connections
+      group.peers.set(l.to, (group.peers.get(l.to) ?? 0) + total(l))
+      groups.set(l.from, group)
+    }
+    return [...groups.values()].map(g => {
+      const peers = [...g.peers].sort((a, b) => b[1] - a[1]).map(([id]) => names.get(id))
+      return { ...g, total: g.external + g.local, name: names.get(g.id),
+        detail: peers.length > 2 ? `${peers.slice(0, 2).join(' · ')} +${peers.length - 2}` : peers.join(' · ') }
+    }).sort((a, b) => b.total - a.total || b.connections - a.connections)
+  }
+
+  function meterRow(item, onClick) {
+    const row = button('', onClick, 'activity-row')
+    const words = document.createElement('span'); words.className = 'row-names'
+    const name = document.createElement('b'), sub = document.createElement('span')
+    name.textContent = item.name; sub.textContent = item.detail
+    words.append(name, sub)
+    const number = document.createElement('small')
+    const meter = document.createElement('span'); meter.className = 'row-meter'
+    const ext = document.createElement('i'), loc = document.createElement('i')
+    loc.className = 'local'; meter.append(ext, loc)
+    row.append(words, number, meter)
+    detailRows.set(item.id, { number, meter, ext, loc })
+    return row
+  }
+
+  function fillRows(items, maximum) {
+    for (const item of items) {
+      const row = detailRows.get(item.id)
+      if (!row) continue
+      row.number.textContent = shownRate(item.total)
+      row.meter.style.width = `${100 * Math.sqrt(visibleRate(item.total) / maximum)}%`
+      row.ext.style.flexGrow = item.external; row.loc.style.flexGrow = item.local
+    }
+  }
+
   function details() {
     if (!sample || !projected) return
-    heading.replaceChildren()
-    content.replaceChildren()
     const node = projected.nodes.find(n => n.id === selected)
     const link = projected.links.find(l => l.id === selected)
     const names = new Map(projected.nodes.map(n => [n.id, n.name]))
-    if (selected || focus) heading.append(button('← All activity', () => { selected = null; focus = null; paint() }, 'detail-back'))
-    const title = document.createElement('h3')
-    title.textContent = node?.name ?? (link ? `${names.get(link.from)} ↔ ${names.get(link.to)}` : 'Live traffic')
+    let items = [], hidden = 0
     if (!node && !link) {
-      const count = document.createElement('span')
-      count.className = 'activity-count'
-      count.textContent = projected.links.length
+      const all = programRows(names)
+      const busy = all.filter(g => g.total > 0)
+      items = showQuiet ? all : busy.slice(0, 8)
+      hidden = all.length - items.length
+    } else if (node && !node.members) {
+      items = projected.links.filter(l => l.from === node.id || l.to === node.id).map(l => {
+        const other = l.from === node.id ? l.to : l.from
+        return { id: l.id, name: names.get(other), detail: `${l.connections} connections${l.local ? ' · inside this Mac' : ''}`,
+          total: total(l), external: l.local ? 0 : total(l), local: l.local ? total(l) : 0 }
+      }).sort((a, b) => b.total - a.total)
+    }
+    const maximum = Math.max(1, ...items.map(i => visibleRate(i.total)))
+    const key = JSON.stringify([selected, focus, showQuiet, node?.members?.length, link?.hosts.length, items.map(i => i.id), hidden, projected.links.length])
+    if (key === detailKey) {
+      fillRows(items, maximum)
+      if (link) content.querySelectorAll('.detail-direction b').forEach((b, i) => { b.textContent = shownRate(i ? link.received : link.sent) })
+      return
+    }
+    detailKey = key
+    detailRows = new Map()
+    heading.replaceChildren()
+    content.replaceChildren()
+    if (selected || focus) heading.append(button('← All programs', () => { selected = null; focus = null; paint() }, 'detail-back'))
+    const title = document.createElement('h3')
+    title.textContent = node?.name ?? (link ? `${names.get(link.from)} ↔ ${names.get(link.to)}` : 'Programs')
+    if (!node && !link) {
+      const count = document.createElement('span'); count.className = 'activity-count'
+      count.textContent = `${projected.links.length} connections`
       title.append(count)
     }
     heading.append(title)
     if (node?.members) {
-      for (const member of node.members) content.append(button(member.name, () => { selected = member.id; focus = member.id; paint() }, 'activity-row'))
+      for (const member of node.members) content.append(button(member.name, () => { selected = member.id; focus = member.id; paint() }, 'activity-row plain'))
       return
     }
     if (node) {
-      const p = document.createElement('p')
-      p.className = 'detail-meta'
+      const p = document.createElement('p'); p.className = 'detail-meta'
       p.textContent = node.pids?.length ? `PID ${node.pids.join(', ')}` : node.kind === 'remote' ? 'External destination' : 'Local endpoint · process unavailable'
       heading.append(p)
-      if (focus !== node.id) heading.append(button('Focus', () => { focus = node.id; paint() }, 'detail-focus'))
+      if (focus !== node.id) heading.append(button('Show only this', () => { focus = node.id; paint() }, 'detail-focus'))
     }
     if (link) {
-      const info = document.createElement('p')
-      info.className = 'detail-meta'
+      const info = document.createElement('p'); info.className = 'detail-meta'
       info.textContent = `${link.local ? 'Inside this Mac' : 'External'} · ${link.connections} connections · ${link.protocols.join(', ')}`
       content.append(info)
       for (const [label, value] of [[`${names.get(link.from)} → ${names.get(link.to)}`, link.sent], [`${names.get(link.to)} → ${names.get(link.from)}`, link.received]]) {
         const p = document.createElement('p'); p.className = 'detail-direction'
-        p.textContent = `${label}  ${fresh() && !sample.warmingUp ? rate(value) : '—'}`; content.append(p)
+        const number = document.createElement('b'); number.textContent = shownRate(value)
+        p.append(`${label}  `, number); content.append(p)
       }
       const ports = document.createElement('p'); ports.className = 'detail-meta'
       ports.textContent = `Ports ${link.ports.join(', ')}`; content.append(ports)
       for (const host of link.hosts.slice(0, 80)) {
         const p = document.createElement('p'); p.className = 'detail-host'; p.textContent = host; content.append(p)
       }
-      if (link.hosts.length > 80) { const p = document.createElement('p'); p.textContent = `+${link.hosts.length - 80} addresses`; content.append(p) }
+      if (link.hosts.length > 80) { const p = document.createElement('p'); p.className = 'detail-meta'; p.textContent = `+${link.hosts.length - 80} addresses`; content.append(p) }
       return
     }
-    const sorted = projected.links.filter(l => !node || l.from === node.id || l.to === node.id)
-      .sort((a, b) => total(b) - total(a) || b.connections - a.connections)
-    const shown = node || showQuiet ? sorted : sorted.filter(l => total(l) > 0).slice(0, 8)
-    const maximum = Math.max(1, ...shown.map(total))
-    for (const l of shown) {
-      const row = button('', () => { selected = l.id; details(); highlight() }, 'activity-row')
-      const words = document.createElement('span')
-      words.className = 'row-names'
-      const name = document.createElement('b'), target = document.createElement('span')
-      name.textContent = node ? names.get(l.from === node.id ? l.to : l.from) : names.get(l.from)
-      target.textContent = node ? `${l.connections} connections` : names.get(l.to)
-      words.append(name, target)
-      const number = document.createElement('small')
-      number.textContent = fresh() && !sample.warmingUp ? rate(total(l)) : '—'
-      const meter = document.createElement('i')
-      meter.className = `row-meter${l.local ? ' local' : ''}`
-      meter.style.width = `${100 * Math.sqrt(visibleRate(total(l)) / maximum)}%`
-      row.append(words, number, meter); content.append(row)
+    for (const item of items) {
+      content.append(meterRow(item, () => { selected = item.id; detailKey = ''; details(); highlight() }))
     }
-    if (!node && sorted.length > shown.length) content.append(button(`${sorted.length - shown.length} more connections`, () => { showQuiet = true; details() }, 'quiet-toggle'))
-    else if (!node && showQuiet) content.append(button('Show less', () => { showQuiet = false; details() }, 'quiet-toggle'))
-    if (!shown.length) {
+    fillRows(items, maximum)
+    if (!node && hidden > 0) content.append(button(`${hidden} more programs`, () => { showQuiet = true; detailKey = ''; details() }, 'quiet-toggle'))
+    else if (!node && showQuiet) content.append(button('Show less', () => { showQuiet = false; detailKey = ''; details() }, 'quiet-toggle'))
+    if (!items.length) {
       const p = document.createElement('p'); p.className = 'detail-meta'
-      p.textContent = sorted.length ? 'Quiet right now' : 'No matching connections'; content.prepend(p)
+      p.textContent = projected.links.length ? 'Quiet right now' : 'No matching connections'; content.prepend(p)
     }
   }
 
@@ -285,6 +345,8 @@ export function mountMonitoring(root) {
 
   function paintFlat() {
     const layout = layoutActivity(projected, width, height)
+    cardLayer.selectAll('rect').data(layout.cards).join('rect').attr('class', 'monitor-card')
+      .attr('x', d => d.x).attr('y', d => d.y).attr('width', d => d.width).attr('height', d => d.height).attr('rx', 14)
     guides.selectAll('path').data(layout.arcs).join('path').attr('d', d => d)
     guides.selectAll('circle').data(layout.circles).join('circle').attr('cx', d => d.cx).attr('cy', d => d.cy).attr('r', d => d.r)
     guides.selectAll('text').data(layout.captions).join('text').attr('x', d => d.x).attr('y', d => d.y)
@@ -302,10 +364,10 @@ export function mountMonitoring(root) {
       .on('mouseenter', (_, l) => { hovered = l.id; highlight() })
       .on('mouseleave', () => { hovered = null; highlight() })
       .on('click', (_, l) => { selected = selected === l.id ? null : l.id; details(); highlight() })
-    enter.append('title')
     const merged = enter.merge(line).classed('departing', false).classed('local', l => l.local)
       .classed('carrying', l => visibleRate(total(l)) > 0).classed('dominant', l => dominant.has(l.id) && visibleRate(total(l)) > 0)
-    merged.select('title').text(l => `${l.connections} connections · ${l.protocols.join('/')} · ${fresh() ? rate(total(l)) : '—'}`)
+    const names = new Map(projected.nodes.map(n => [n.id, n.name]))
+    merged.attr('data-tip', l => `${names.get(l.from)} → ${names.get(l.to)}  ${shownRate(l.sent)}\n${names.get(l.to)} → ${names.get(l.from)}  ${shownRate(l.received)}\n${l.connections} connections · ${l.protocols.join('/')}`)
     merged.interrupt().transition().duration(650).style('opacity', 1).attr('d', geometry)
       .attr('stroke-width', l => 0.8 + Math.sqrt(visibleRate(total(l)) / maxRate) * 5)
     const dots = peers.selectAll('g').data(layout.nodes, n => n.key)
@@ -321,7 +383,6 @@ export function mountMonitoring(root) {
     added.append('circle').attr('class', 'node-core').attr('r', 5.5)
     added.append('text').attr('class', 'peer-name')
     added.append('text').attr('class', 'peer-rate')
-    added.append('title')
     const allDots = added.merge(dots).classed('departing', false).classed('compact', n => n.compact)
       .classed('quiet-labels', n => n.quiet).classed('busy', n => visibleRate(n.load) > 0).classed('remote', n => n.kind === 'remote')
       .classed('cluster', n => Boolean(n.members)).classed('local', n => n.key.startsWith('local:')).attr('aria-label', n => `${n.name} · ${n.compact ? 'inside this Mac' : n.kind === 'remote' ? 'external' : 'on this Mac'}`)
@@ -329,7 +390,9 @@ export function mountMonitoring(root) {
       .attr('transform', n => { return `translate(${n.x},${n.y})` })
     allDots.select('.node-core').attr('fill', color).attr('r', n => n.compact ? 3.5 : 5)
     allDots.select('.node-halo').attr('fill', color).attr('r', n => n.compact ? 9 : 11)
-    allDots.select('title').text(n => n.name)
+    const counts = new Map()
+    for (const l of projected.links) for (const id of new Set([l.from, l.to])) counts.set(id, (counts.get(id) ?? 0) + l.connections)
+    allDots.attr('data-tip', n => `${n.name}\n${shownRate(n.load)} · ${counts.get(n.id) ?? 0} connections`)
     allDots.select('.peer-name').attr('x', n => n.right ? (n.compact ? 8 : 12) : (n.compact ? -8 : -12))
       .attr('dy', n => !n.compact && !n.tight && visibleRate(n.load) > 0 ? '-0.2em' : '0.35em').attr('text-anchor', n => n.right ? 'start' : 'end')
       .text(n => shortName(n, n.compact ? 18 : width < 740 ? 20 : 27))
@@ -344,25 +407,46 @@ export function mountMonitoring(root) {
     })
   }
 
+  // Metrics glide to each new sample instead of jumping once a second.
+  const shown = new Map()
+  function tweenMetric(metric, target) {
+    const from = shown.get(metric) ?? target
+    shown.set(metric, target)
+    const draw = value => {
+      const [number, unit] = rate(value).split(' ')
+      const a = document.createElement('span'), b = document.createElement('span')
+      a.className = 'metric-value'; b.className = 'metric-unit'
+      a.textContent = number; b.textContent = ` ${unit}`
+      metric.replaceChildren(a, b)
+    }
+    if (reducedMotion.matches || from === target) { d3.select(metric).interrupt(); draw(target); return }
+    d3.select(metric).interrupt().transition().duration(700).ease(d3.easeCubicOut)
+      .tween('text', () => t => draw(from + (target - from) * t))
+  }
+
   function paintReadouts() {
     panel.querySelector('.stage-heading small').textContent = `${sample.nodes.filter(n => n.pids.length).length} programs · ${projected.connections} connections`
     const empty = panel.querySelector('.monitor-empty')
     empty.hidden = projected.links.length > 0
-    empty.textContent = sample.nodes.length ? 'No matching connections' : 'No visible TCP or UDP connections'
+    if (!empty.hidden) {
+      const searching = Boolean(query.trim() || focus)
+      empty.querySelector('b').textContent = searching ? `Nothing matches “${query.trim() || 'this focus'}”` : 'No TCP or UDP connections right now'
+      empty.querySelector('span').textContent = searching ? 'Try a program name, a host or a port number.' : 'Connections appear here as soon as a program opens one.'
+      empty.querySelector('.empty-action').hidden = !searching
+      empty.classList.toggle('searching', searching)
+    }
+    panel.querySelector('.monitor-paused').hidden = sample.active !== false
     center.style('display', projected.links.length ? null : 'none')
     for (const key of ['sent', 'received', 'internalRate']) {
       const metric = panel.querySelector(`[data-metric="${key}"]`)
-      if (fresh() && !sample.warmingUp) {
-        const [value, unit] = rate(sample[key]).split(' ')
-        const number = document.createElement('span'), suffix = document.createElement('span')
-        number.className = 'metric-value'; suffix.className = 'metric-unit'
-        number.textContent = value; suffix.textContent = ` ${unit}`
-        metric.replaceChildren(number, suffix)
-      } else { metric.textContent = '—' }
+      if (fresh() && !sample.warmingUp) tweenMetric(metric, sample[key])
+      else { shown.delete(metric); d3.select(metric).interrupt(); metric.textContent = '—' }
       const history = trend.filter(point => point.at >= sample.at - 30_000)
       const ceiling = Math.max(1, ...history.map(point => point[key]))
-      const path = history.length > 1 ? history.map((point, i) => `${i ? 'L' : 'M'}${(72 * (point.at - sample.at + 30_000) / 30_000).toFixed(1)},${(16 - 13 * point[key] / ceiling).toFixed(1)}`).join(' ') : ''
-      panel.querySelector(`[data-spark="${key}"] path`).setAttribute('d', path)
+      const xs = history.map(point => (72 * (point.at - sample.at + 30_000) / 30_000).toFixed(1))
+      const path = history.length > 1 ? history.map((point, i) => `${i ? 'L' : 'M'}${xs[i]},${(16 - 13 * point[key] / ceiling).toFixed(1)}`).join(' ') : ''
+      panel.querySelector(`[data-spark="${key}"] .spark-line`).setAttribute('d', path)
+      panel.querySelector(`[data-spark="${key}"] .spark-area`).setAttribute('d', path ? `${path} L${xs.at(-1)},18 L${xs[0]},18 Z` : '')
     }
     panel.querySelector('[data-metric="connections"]').textContent = projected.connections
     details(); highlight()
@@ -379,9 +463,11 @@ export function mountMonitoring(root) {
     orbitButton.setAttribute('aria-pressed', String(active)); globe.setOrbit(active)
   })
   panel.querySelector('[data-reset]').addEventListener('click', () => globe.reset())
+  panel.querySelector('.empty-action').addEventListener('click', () => {
+    const input = panel.querySelector('input'); input.value = ''; query = ''; focus = null; selected = null; paint(); input.focus()
+  })
   panel.querySelector('input').addEventListener('input', e => { query = e.target.value; focus = null; selected = null; paint() })
   map.on('click', e => { if (e.target === map.node()) { selected = null; focus = null; paint() } })
-  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
   function tick(time) {
     if (destroyed) return
     animation = requestAnimationFrame(tick)

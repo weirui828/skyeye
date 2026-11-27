@@ -209,8 +209,8 @@ private struct MonitoringWorkspace: View {
             // The window title already says Monitoring: this bar only carries the sampler's state.
             HStack(spacing: 8) {
                 Spacer()
-                // Pantone Orange 021 C, the page's accent.
-                Circle().fill(activity.running ? Color(red: 0.996, green: 0.318, blue: 0) : Tone.idle).frame(width: 7, height: 7)
+                // Pantone 3278 C, the page's accent.
+                Circle().fill(activity.running ? Color(red: 0, green: 0.612, blue: 0.467) : Tone.idle).frame(width: 7, height: 7)
                 Text(activity.status).font(.system(size: 12)).foregroundStyle(.secondary)
                 Button(activity.running ? "Pause" : "Resume") {
                     if activity.running { activity.stop() } else { activity.start(manager: manager) }

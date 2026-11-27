@@ -90,7 +90,7 @@ function shellTexture() {
     const facing = Math.max(0, (4.5 * pz - 1) / Math.hypot(px, py, 4.5 - pz))
     const light = Math.max(0, -0.35 * px - 0.45 * py + 0.82 * pz)
     rays.push({ offset: (y * size + x) * 4, point,
-      blend: 0.015 + (1 - light) * 0.025 + (1 - facing) ** 4 * 0.36,
+      blend: 0.01 + (1 - light) * 0.02 + (1 - facing) ** 4 * 0.24,
       shine: Math.max(0, -0.28 * px - 0.38 * py + 0.88 * pz) ** 50 * 0.8 })
   }
   let stamp = -Infinity, key = ''
@@ -236,6 +236,24 @@ export function mountGlobe(canvas, { onSelect, onHover }) {
     ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2)
     ctx.strokeStyle = colors.thread; ctx.globalAlpha = 0.25; ctx.lineWidth = 0.65; ctx.stroke()
 
+    // A faint graticule gives the glass a surface to read rotation against; the far side nearly vanishes.
+    const ring = point => Array.from({ length: 73 }, (_, i) => project(point(i / 72 * Math.PI * 2)))
+    const graticule = []
+    for (const y of [-0.66, -0.34, 0, 0.34, 0.66]) {
+      const rr = Math.sqrt(1 - y * y)
+      graticule.push(ring(a => [Math.cos(a) * rr, y, Math.sin(a) * rr]))
+    }
+    for (let k = 0; k < 6; k++) {
+      const m = k / 6 * Math.PI
+      graticule.push(ring(a => [Math.cos(m) * Math.cos(a), Math.sin(a), Math.sin(m) * Math.cos(a)]))
+    }
+    for (const line of graticule) {
+      for (let i = 1; i < line.length; i++) {
+        const z = (line[i].z + line[i - 1].z) / 2
+        stroke([line[i - 1], line[i]], colors.thread, z > 0 ? 0.16 + z * 0.2 : 0.03, 0.55)
+      }
+    }
+
     const seam = Array.from({ length: 121 }, (_, i) => {
       const angle = i / 120 * Math.PI * 2, rr = Math.sqrt(1 - 0.28 ** 2)
       return project([-0.28, Math.cos(angle) * rr, Math.sin(angle) * rr])
@@ -317,23 +335,29 @@ export function mountGlobe(canvas, { onSelect, onHover }) {
 
     const labelled = [...hits].filter(n => n.id === chosen || n.screen.z > 0.05 && (!chosen || related.has(n.id)))
       .sort((a, b) => Number(b.id === chosen) - Number(a.id === chosen) || (loads.get(b.id) ?? 0) - (loads.get(a.id) ?? 0) || b.screen.z - a.screen.z)
-    const labelBoxes = []
     ctx.font = '12px -apple-system, system-ui, sans-serif'
-    for (const node of labelled.slice(0, chosen ? 14 : 9)) {
-      const p = node.screen, right = p.x >= cx
-      const cap = width < 740 ? 18 : 25, name = shortName(node, cap)
-      const textWidth = ctx.measureText(name).width
-      const edge = right ? Math.min(width - textWidth - 14, cx + r + 22) : Math.max(textWidth + 14, cx - r - 22)
-      let y = clamp(p.y, cy - r + 15, cy + r - 15)
-      for (let attempt = 0; attempt < 12 && labelBoxes.some(b => b.right === right && Math.abs(b.y - y) < 23); attempt++) y += y < cy ? -23 : 23
-      y = clamp(y, 70, height - 62)
-      if (labelBoxes.some(b => b.right === right && Math.abs(b.y - y) < 19) && node.id !== chosen) continue
-      labelBoxes.push({ right, y })
-      const lineEnd = right ? edge - 6 : edge + 6
-      stroke([p, { x: right ? Math.max(p.x + 8, edge - 14) : Math.min(p.x - 8, edge + 14), y }, { x: lineEnd, y }], colors.thread, 0.55, 0.65)
-      ctx.globalAlpha = node.id === chosen ? 1 : 0.9
-      ctx.fillStyle = node.kind === 'remote' ? colors.muted : colors.ink
-      ctx.textAlign = right ? 'left' : 'right'; ctx.fillText(name, edge, y + 3)
+    const picked = labelled.slice(0, chosen ? 14 : 9)
+    for (const right of [false, true]) {
+      // Keep each side in the same vertical order as its nodes, at least 22px apart, so leader lines never cross.
+      const side = picked.filter(n => (n.screen.x >= cx) === right).sort((a, b) => a.screen.y - b.screen.y)
+      const top = 70, bottom = height - 62, gap = 22
+      const ys = side.map(n => clamp(n.screen.y, cy - r + 15, cy + r - 15))
+      for (let i = 1; i < ys.length; i++) ys[i] = Math.max(ys[i], ys[i - 1] + gap)
+      const overflow = (ys.at(-1) ?? 0) - bottom
+      if (overflow > 0) for (let i = ys.length - 1; i >= 0; i--) ys[i] = Math.min(ys[i] - (i === ys.length - 1 ? overflow : 0), (ys[i + 1] ?? Infinity) - gap)
+      side.forEach((node, i) => {
+        const y = ys[i]
+        if (y < top) return
+        const p = node.screen
+        const cap = width < 740 ? 18 : 25, name = shortName(node, cap)
+        const textWidth = ctx.measureText(name).width
+        const edge = right ? Math.min(width - textWidth - 14, cx + r + 22) : Math.max(textWidth + 14, cx - r - 22)
+        const lineEnd = right ? edge - 6 : edge + 6
+        stroke([p, { x: right ? Math.max(p.x + 8, edge - 14) : Math.min(p.x - 8, edge + 14), y }, { x: lineEnd, y }], colors.thread, 0.55, 0.65)
+        ctx.globalAlpha = node.id === chosen ? 1 : 0.9
+        ctx.fillStyle = node.kind === 'remote' ? colors.muted : colors.ink
+        ctx.textAlign = right ? 'left' : 'right'; ctx.fillText(name, edge, y + 3)
+      })
     }
     const localAnchor = project([-0.82, 0, 0]), remoteAnchor = project([0.65, 0, 0])
     ctx.globalAlpha = 0.8; ctx.fillStyle = colors.muted; ctx.font = '500 11px -apple-system, system-ui, sans-serif'; ctx.textAlign = 'center'
