@@ -45,7 +45,7 @@ jobs:
       artifact_name: SkyEye-${{ needs.release.outputs.version }}-arm64
 
   publish:
-    name: Attach packages and publish developer preview
+    name: Attach packages and publish release
     needs: [release, package]
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -77,5 +77,5 @@ jobs:
             "build/SkyEye-$RELEASE_VERSION-arm64.zip" \
             "build/SkyEye-$RELEASE_VERSION-arm64-SHA256SUMS.txt" \
             --clobber
-      - name: Publish developer preview
-        run: gh release edit "$RELEASE_TAG" --draft=false --prerelease
+      - name: Publish release
+        run: gh release edit "$RELEASE_TAG" --draft=false --prerelease=false --latest

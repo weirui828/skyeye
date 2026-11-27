@@ -61,7 +61,7 @@ built-in `GITHUB_TOKEN`; it does not approve or merge its own PRs.
 4. Release Please creates the version tag and a draft GitHub release. The workflow
    reuses macOS CI to test and package the exact release commit, checks the app
    version against the tag, verifies checksums, uploads the DMG and ZIP, and only
-   then publishes the developer prerelease.
+   then publishes the release as the latest release.
 
 The tag and draft are created before packaging; downloads remain unpublished if a
 check or package fails. Use **Re-run failed jobs** on that Release Please run after
