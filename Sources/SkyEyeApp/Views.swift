@@ -349,10 +349,12 @@ struct ServiceListView: View {
                 Button {
                     CanvasWindowController.shared.show(manager: manager)
                 } label: {
-                    Label("Canvas", systemImage: "point.3.connected.trianglepath.dotted")
+                    Image(systemName: "point.3.connected.trianglepath.dotted")
                 }
-                .help("See which services depend on which")
+                .accessibilityLabel("Canvas")
+                .help("Canvas — service dependencies")
                 PortsButton()
+                MonitoringButton()
                 Spacer()
                 Button { route = .edit(nil) } label: {
                     Label("Add service", systemImage: "plus")

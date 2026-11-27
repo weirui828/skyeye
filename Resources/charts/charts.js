@@ -6,9 +6,11 @@ import { beeswarmSvg, ringsSvg, timelineSvg, treemapSvg } from './ports.js'
 import { bundleSvg, treeSvg } from './processes.js'
 import { flowSvg, mountSunburst, ridgelineSvg } from './traffic.js'
 import { bytes, memory } from './util.js'
+import { mountMonitoring } from './monitoring.js'
 
 const board = document.getElementById('board')
 const tipBox = document.getElementById('tip')
+let monitoring = null
 const state = {
   scan: null,
   history: null,
@@ -113,6 +115,11 @@ function section(card, c) {
 
 function draw() {
   if (!state.scan) return
+  if (state.tab === 'monitoring') {
+    if (!monitoring) monitoring = mountMonitoring(board)
+    monitoring.update(state.scan)
+    return
+  }
   const c = context()
   state.width = c.width
   const cards = (CARDS[state.tab] ?? CARDS.ports).map(card => section(card, c)).filter(Boolean)
@@ -162,8 +169,11 @@ function select(pid) {
 }
 
 function show(tab) {
-  if (!CARDS[tab] || tab === state.tab) return
+  if ((!CARDS[tab] && tab !== 'monitoring') || tab === state.tab) return
+  monitoring?.destroy()
+  monitoring = null
   state.tab = tab
+  document.title = tab === 'monitoring' ? 'Monitoring' : 'Ports'
   window.scrollTo(0, 0)
   draw()
 }

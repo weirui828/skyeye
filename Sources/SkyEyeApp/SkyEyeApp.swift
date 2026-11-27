@@ -103,6 +103,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if CommandLine.arguments.contains("--open-canvas") {
             CanvasWindowController.shared.show(manager: manager)
         }
+        if CommandLine.arguments.contains("--open-monitoring") {
+            MonitoringWindowController.shared.show(manager: manager)
+        }
         if CommandLine.arguments.contains("--open-ports") {
             PortsWindowController.shared.show(manager: manager, monitor: monitor)
         } else {

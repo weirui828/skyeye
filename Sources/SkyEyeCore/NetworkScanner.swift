@@ -73,6 +73,10 @@ public final class NetworkScanner: @unchecked Sendable {
         }
     }
 
+    public var cachedOwners: [String: Outgoing.Owned] {
+        store.owners.mapValues { Outgoing.Owned(owner: $0.owner, host: $0.host) }
+    }
+
     // MARK: Listening
 
     public func scanListening(services: [Service] = [], now: Date = Date()) -> ListeningScan {

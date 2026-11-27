@@ -171,6 +171,20 @@ In the canvas, SkyEye asks before it stops a dependency with active dependent se
 Select **Ports** above the service cards.
 A red count on the button shows how many programs need a look.
 
+Select the **Monitoring** waveform icon after **Ports** for a live network map.
+Circles represent programs and destinations. Curves include connections inside this Mac and to other computers.
+Moving dots show the direction of measured traffic; line width follows bytes per second.
+Use **2D** for the semicircle map or **3D** for a single network sphere.
+In 3D, programs sit on the smaller cap and external destinations occupy the larger surface. Traffic travels through the sphere.
+The two regions have distinct translucent colors. The sphere rotates slowly by default and follows your drag, then resumes rotation when released.
+Scroll to zoom, or use the arrow keys when the sphere has focus. **Rotate** pauses or resumes rotation; **Reset** restores the view.
+Select a circle or curve for details. Search by program, address, host, or port.
+Large maps group smaller programs and destinations; select a group to find an individual program.
+Monitoring samples visible TCP and UDP sockets every second while its window is open. Closing the window stops collection.
+The first sample sets the baseline. Idle connections do not animate. Totals count each internal connection once.
+Process and destination names use system data and the address owners already known to SkyEye.
+Some processes or endpoints may be unavailable to macOS network counters. This view does not capture packet contents or Unix-domain sockets.
+
 The page lists each program that listens on a TCP port.
 It shows who started the program, how far the port can be reached, and a risk level.
 A program that belongs to a SkyEye service shows the service name.
@@ -379,6 +393,7 @@ The HTTP service tests need Python 3. CI provides Python 3.12.
 ```bash
 swift test --disable-sandbox
 python3 -m unittest discover -s scripts/tests -v
+node --test scripts/tests/monitoring.test.mjs
 ./scripts/package.sh
 ```
 
@@ -389,10 +404,12 @@ To open a page when the app starts, pass an argument to the app's executable:
 | `--open-services` | The menu's content, in a window. Add `settings`, `new`, `edit:<name>` or `logs:<name>` to open that page. |
 | `--open-canvas` | The dependency canvas. |
 | `--open-ports` | The ports page. |
+| `--open-monitoring` | Live network monitoring. |
 
 With `SKYEYE_HOME` set, SkyEye keeps its window layout and other interface preferences apart from the main app's.
 To preview the charts in a browser with demo data, serve the `Resources` folder.
 Then open `http://localhost:8765/charts-dev/preview.html`.
+The live monitoring demo is at `http://localhost:8765/charts-dev/monitoring.html` and uses simulated data.
 
 ```bash
 python3 -m http.server 8765 --bind 127.0.0.1 --directory Resources
