@@ -27,7 +27,15 @@ function sample() {
 }
 function tick() { step += 1; const value = sample(); window.SkyEyeCharts.render(value); return value }
 window.SkyEyeCharts.show('monitoring')
+// Demo alerts, as SkyEye's background scan would send them.
+window.SkyEyeCharts.history({ alerts: [
+  { id: 'a1', program: 'updater-helper', text: 'Not code-signed', at: Date.now(), muted: false },
+  { id: 'a2', program: 'ssh', text: 'Connects to 203.0.113.9 on port 9050, Tor', at: Date.now(), muted: true },
+] })
 tick()
+// ?pulse=caa151 tries another colour for moving traffic.
+const pulse = new URLSearchParams(location.search).get('pulse')
+if (/^[0-9a-f]{6}$/i.test(pulse ?? '')) document.querySelector('.monitoring-root').style.setProperty('--pulse', `#${pulse}`)
 if (new URLSearchParams(location.search).has('3d')) document.querySelector('[data-view="3d"]').click()
 timer = setInterval(tick, 1000)
 window.SkyEyeMonitoringDemo = {

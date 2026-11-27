@@ -215,7 +215,7 @@ export function mountGlobe(canvas, { onSelect, onHover }) {
     if (palette !== parent.dataset.palette) {
       palette = parent.dataset.palette
       const style = getComputedStyle(parent)
-      colors = Object.fromEntries(['card', 'ink', 'muted', 'accent', 'local', 'thread', 'edge'].map(key => [key, style.getPropertyValue(`--${key}`).trim()]))
+      colors = Object.fromEntries(['card', 'ink', 'muted', 'accent', 'local', 'thread', 'edge', 'pulse'].map(key => [key, style.getPropertyValue(`--${key}`).trim()]))
     }
     const ratio = Math.min(2, window.devicePixelRatio || 1)
     if (canvas.width !== Math.round(width * ratio) || canvas.height !== Math.round(height * ratio)) {
@@ -281,7 +281,7 @@ export function mountGlobe(canvas, { onSelect, onHover }) {
       const emphasized = chosen && (chosen === link.id || chosen === link.from || chosen === link.to)
       const dim = chosen && !emphasized
       const color = link.local ? colors.local : colors.accent
-      const weight = active ? 0.6 + Math.sqrt(flowRate(link) / maximum) * 3.5 : 0.55
+      const weight = active ? 0.5 + Math.sqrt(flowRate(link) / maximum) * 2.2 : 0.5
       const first = link.points[0], last = link.points.at(-1)
       const gradient = ctx.createLinearGradient(first.x, first.y, last.x, last.y)
       for (const [stop, index] of [[0, 0], [0.5, 24], [1, 48]]) {
@@ -296,16 +296,10 @@ export function mountGlobe(canvas, { onSelect, onHover }) {
         if (speed <= 0) continue
         const phase = flowPhase(time, speed, link.id, direction < 0)
         const fade = Math.min(1, phase * 12, (1 - phase) * 12)
-        const tail = Array.from({ length: 11 }, (_, i) => project(sphereCurve(link.a.position, link.b.position, clamp(phase - direction * (10 - i) * 0.008, 0, 1), link.local)))
-        const glow = ctx.createLinearGradient(tail[0].x, tail[0].y, tail.at(-1).x, tail.at(-1).y)
-        glow.addColorStop(0, rgba(color, 0)); glow.addColorStop(1, rgba(color, fade * (0.5 + tail.at(-1).z * 0.2)))
-        stroke(tail, glow, 1, 2)
-        const point = project(sphereCurve(link.a.position, link.b.position, phase, link.local))
-        ctx.globalAlpha = fade * (0.5 + (point.z + 1) * 0.25)
-        ctx.beginPath(); ctx.arc(point.x, point.y, 2.2 * point.scale, 0, Math.PI * 2)
-        ctx.fillStyle = color; ctx.fill()
-        ctx.beginPath(); ctx.arc(point.x - 0.3, point.y - 0.3, 0.8 * point.scale, 0, Math.PI * 2)
-        ctx.fillStyle = '#ffffff'; ctx.fill()
+        // A short stretch of line moving along the connection, fainter on the far side.
+        const pulse = Array.from({ length: 13 }, (_, i) => project(sphereCurve(link.a.position, link.b.position, clamp(phase - direction * (12 - i) * 0.008, 0, 1), link.local)))
+        const depth = (pulse.at(-1).z + 1) / 2
+        stroke(pulse, colors.pulse, fade * (0.45 + depth * 0.55), 1.6)
       }
     }
 

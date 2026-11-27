@@ -197,6 +197,11 @@ struct SettingsView: View {
                 isOn: boolSetting(\.whoisLookups)
             )
             .help("The ports page names who each program talks to from a built-in table and reverse DNS. Turning this on also sends addresses those can't name to public registries such as ARIN and RIPE.")
+            SettingsToggle(
+                title: "Watch the network and alert on suspicious activity",
+                isOn: boolSetting(\.watchNetwork)
+            )
+            .help("Once you have opened Ports or Monitoring, SkyEye scans the network every minute, also when its windows are closed, and sends a notification for unsigned programs that go online, risky ports, connections in from outside and upload spikes.")
         }
     }
 

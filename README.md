@@ -173,7 +173,7 @@ A red count on the button shows how many programs need a look.
 
 Select the **Monitoring** waveform icon after **Ports** for a live network map.
 Circles represent programs and destinations. Curves include connections inside this Mac and to other computers.
-Moving dots show the direction of measured traffic; line width follows bytes per second.
+Short graphite lines move in the direction of measured traffic; line width follows bytes per second.
 Use **2D** for the semicircle map or **3D** for a single network sphere.
 In 3D, programs sit on the smaller cap and external destinations occupy the larger surface. Traffic travels through the sphere.
 The two regions have distinct translucent colors. The sphere rotates slowly by default and follows your drag, then resumes rotation when released.
@@ -184,6 +184,19 @@ Monitoring samples visible TCP and UDP sockets every second while its window is 
 The first sample sets the baseline. Idle connections do not animate. Totals count each internal connection once.
 Process and destination names use system data and the address owners already known to SkyEye.
 Some processes or endpoints may be unavailable to macOS network counters. This view does not capture packet contents or Unix-domain sockets.
+
+Once you have opened **Ports** or **Monitoring**, SkyEye also watches the network in the background: it scans once a minute, with or without a window open.
+It sends a notification and puts a red dot on the Monitoring icon when:
+
+- a program that connects out is not code-signed, or its signature doesn't verify,
+- something outside your network connects in to a port you listen on,
+- a program connects to a port often used by backdoors, IRC-controlled malware or Tor,
+- a program uploads far more than it usually does: at least 50 MB a minute and ten times its usual.
+
+The same alert is sent at most once a day. Alerts are listed at the top of the Monitoring side panel: **Trust** stops alerts about that program, and **Mute for a day** stops its notifications for a day.
+Turn this off in Settings → Advanced with **Watch the network and alert on suspicious activity**.
+SkyEye names most addresses itself: a built-in table that includes the cloud ranges of Tencent and Alibaba, then reverse DNS through your Mac's resolver.
+Regenerate the cloud ranges with `python3 scripts/cloud-ranges.py`.
 
 The page lists each program that listens on a TCP port.
 It shows who started the program, how far the port can be reached, and a risk level.

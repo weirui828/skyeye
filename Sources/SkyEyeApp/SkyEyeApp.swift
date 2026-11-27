@@ -95,6 +95,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         UsageHistory.shared.start(manager: manager)
         manager.startConfiguredServices()
         notifier.requestAuthorization()
+        monitor.onAlert = { [notifier] alert in notifier.post(alert) }
+        monitor.startWatching()
         let arguments = CommandLine.arguments
         if let index = arguments.firstIndex(of: "--open-services") {
             let route = arguments.indices.contains(index + 1) ? Route(argument: arguments[index + 1]) : nil
@@ -104,7 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             CanvasWindowController.shared.show(manager: manager)
         }
         if CommandLine.arguments.contains("--open-monitoring") {
-            MonitoringWindowController.shared.show(manager: manager)
+            MonitoringWindowController.shared.show(manager: manager, monitor: monitor)
         }
         if CommandLine.arguments.contains("--open-ports") {
             PortsWindowController.shared.show(manager: manager, monitor: monitor)
@@ -191,6 +193,15 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         }
         content.sound = .default
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+    }
+
+    func post(_ alert: NetworkAlert) {
+        guard available else { return }
+        let content = UNMutableNotificationContent()
+        content.title = "\(alert.program): suspicious network activity"
+        content.body = alert.text + "\nOpen Monitoring in SkyEye to trust or mute it."
+        content.sound = .default
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: alert.id, content: content, trigger: nil))
     }
 
     func userNotificationCenter(
