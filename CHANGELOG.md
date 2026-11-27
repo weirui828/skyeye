@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/weirui828/skyeye/compare/v1.3.0...v1.4.0) (2026-11-27)
+
+
+### Features
+
+* alert on suspicious network activity and name cloud addresses ([#33](https://github.com/weirui828/skyeye/issues/33)) ([dbbe9fd](https://github.com/weirui828/skyeye/commit/dbbe9fd06c8321e5c2e96cb601bde14f967f2608))
+
 ## [1.3.0](https://github.com/weirui828/skyeye/compare/v1.2.0...v1.3.0) (2026-11-27)
 
 
