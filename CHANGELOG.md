@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/weirui828/skyeye/compare/v1.2.0...v1.3.0) (2026-11-27)
+
+
+### Features
+
+* add a live network Monitoring window ([#31](https://github.com/weirui828/skyeye/issues/31)) ([41ce49b](https://github.com/weirui828/skyeye/commit/41ce49b13dbe359f37e7f9bcbd053b77ff0ebe41))
+
 ## [1.2.0](https://github.com/weirui828/skyeye/compare/v1.1.0...v1.2.0) (2026-11-13)
 
 
