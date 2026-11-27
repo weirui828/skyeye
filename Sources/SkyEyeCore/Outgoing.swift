@@ -178,20 +178,51 @@ public enum Outgoing {
         return parts.reduce(0) { $0 << 8 | $1! }
     }
 
+    /// One parsed table row. IPv6 CIDRs compare as two 64-bit halves; bare IPv6 strings compare as text prefixes.
+    private enum Rule {
+        case v4(base: UInt32, mask: UInt32, owner: String)
+        case v6(high: UInt64, low: UInt64, maskHigh: UInt64, maskLow: UInt64, owner: String)
+        case text(prefix: String, owner: String)
+    }
+
+    private static func ipv6(_ ip: String) -> (UInt64, UInt64)? {
+        guard let groups = expand6(ip), groups.count == 8 else { return nil }
+        let words = groups.compactMap { UInt64($0, radix: 16) }
+        guard words.count == 8 else { return nil }
+        return (words[0..<4].reduce(0) { $0 << 16 | $1 }, words[4..<8].reduce(0) { $0 << 16 | $1 })
+    }
+
+    private static func mask64(_ bits: Int) -> UInt64 { bits <= 0 ? 0 : bits >= 64 ? .max : UInt64.max << UInt64(64 - bits) }
+
+    /// The hand-kept table first, then the generated cloud ranges; parsed once.
+    private static let rules: [Rule] = (owners + CloudRanges.all).compactMap { range, owner in
+        guard let slash = range.firstIndex(of: "/") else { return .text(prefix: range, owner: owner) }
+        let address = String(range[..<slash])
+        guard let bits = Int(range[range.index(after: slash)...]) else { return nil }
+        if let base = ipv4(address), bits <= 32 {
+            let mask: UInt32 = bits == 0 ? 0 : UInt32.max << UInt32(32 - bits)
+            return .v4(base: base & mask, mask: mask, owner: owner)
+        }
+        guard let (high, low) = ipv6(address), bits <= 128 else { return nil }
+        let maskHigh = mask64(bits), maskLow = mask64(bits - 64)
+        return .v6(high: high & maskHigh, low: low & maskLow, maskHigh: maskHigh, maskLow: maskLow, owner: owner)
+    }
+
     /// The owner, when the address is local or in the built-in table. `lan` holds this Mac's own IPv6 /64s.
     public static func ownerByPrefix(_ ip: String, lan: [String] = []) -> String? {
         if isLocal(ip) { return localNetwork }
         if let full = expand6(ip), lan.contains(full.prefix(4).joined(separator: ":")) { return localNetwork }
         let v4 = ipv4(ip)
-        for (range, owner) in owners {
-            if let slash = range.firstIndex(of: "/") {
-                guard let v4, let base = ipv4(String(range[..<slash])), let bits = UInt32(range[range.index(after: slash)...]) else {
-                    continue
-                }
-                let mask: UInt32 = bits == 0 ? 0 : ~0 << (32 - bits)
-                if v4 & mask == base & mask { return owner }
-            } else if v4 == nil, ip.lowercased().hasPrefix(range) {
-                return owner
+        let v6 = v4 == nil ? ipv6(ip) : nil
+        let lower = ip.lowercased()
+        for rule in rules {
+            switch rule {
+            case let .v4(base, mask, owner):
+                if let v4, v4 & mask == base { return owner }
+            case let .v6(high, low, maskHigh, maskLow, owner):
+                if let (h, l) = v6, h & maskHigh == high, l & maskLow == low { return owner }
+            case let .text(prefix, owner):
+                if v4 == nil, lower.hasPrefix(prefix) { return owner }
             }
         }
         return nil
