@@ -318,7 +318,7 @@ export function mountGlobe(canvas, { onSelect, onHover }) {
     const labelled = [...hits].filter(n => n.id === chosen || n.screen.z > 0.05 && (!chosen || related.has(n.id)))
       .sort((a, b) => Number(b.id === chosen) - Number(a.id === chosen) || (loads.get(b.id) ?? 0) - (loads.get(a.id) ?? 0) || b.screen.z - a.screen.z)
     const labelBoxes = []
-    ctx.font = '10.5px -apple-system, system-ui, sans-serif'
+    ctx.font = '12px -apple-system, system-ui, sans-serif'
     for (const node of labelled.slice(0, chosen ? 14 : 9)) {
       const p = node.screen, right = p.x >= cx
       const cap = width < 740 ? 18 : 25, name = shortName(node, cap)
@@ -336,7 +336,7 @@ export function mountGlobe(canvas, { onSelect, onHover }) {
       ctx.textAlign = right ? 'left' : 'right'; ctx.fillText(name, edge, y + 3)
     }
     const localAnchor = project([-0.82, 0, 0]), remoteAnchor = project([0.65, 0, 0])
-    ctx.globalAlpha = 0.8; ctx.fillStyle = colors.muted; ctx.font = '9px -apple-system, system-ui, sans-serif'; ctx.textAlign = 'center'
+    ctx.globalAlpha = 0.8; ctx.fillStyle = colors.muted; ctx.font = '500 11px -apple-system, system-ui, sans-serif'; ctx.textAlign = 'center'
     ctx.fillText('On this Mac', localAnchor.x, cy - r - 25)
     ctx.fillText('External', remoteAnchor.x, cy - r - (Math.abs(localAnchor.x - remoteAnchor.x) < 90 ? 42 : 25))
     ctx.textAlign = 'start'; ctx.globalAlpha = 1

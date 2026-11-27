@@ -206,21 +206,19 @@ private struct MonitoringWorkspace: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Image(systemName: "waveform.path.ecg").foregroundStyle(.secondary)
-                Text("Monitoring").font(.system(size: 15, weight: .semibold))
-                Text("Network").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
+            // The window title already says Monitoring: this bar only carries the sampler's state.
+            HStack(spacing: 8) {
                 Spacer()
-                Circle().fill(activity.running ? Color(red: 1, green: 0.353, blue: 0) : Tone.idle).frame(width: 6, height: 6)
-                Text(activity.status).font(.system(size: 11)).foregroundStyle(.secondary)
+                // Pantone Orange 021 C, the page's accent.
+                Circle().fill(activity.running ? Color(red: 0.996, green: 0.318, blue: 0) : Tone.idle).frame(width: 7, height: 7)
+                Text(activity.status).font(.system(size: 12)).foregroundStyle(.secondary)
                 Button(activity.running ? "Pause" : "Resume") {
                     if activity.running { activity.stop() } else { activity.start(manager: manager) }
                 }
-                .buttonStyle(.plain)
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
-            .padding(.horizontal, 20).padding(.vertical, 12)
+            .padding(.horizontal, 24).padding(.vertical, 8)
             Divider()
             if let directory = ChartBoard.directory {
                 ChartBoard(directory: directory, json: activity.json, history: "{}", tab: "monitoring", selected: nil, onSelect: { _ in })

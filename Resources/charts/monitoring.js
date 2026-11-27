@@ -58,30 +58,49 @@ export function layoutActivity(graph, width, height) {
   const nodes = [], arcs = [], captions = [], circles = [], summaries = []
   const loads = new Map()
   for (const link of graph.links) for (const id of [link.from, link.to]) loads.set(id, (loads.get(id) ?? 0) + total(link))
+  // The internal ring sits top right; place it first so the external semicircle can keep clear of it.
+  let ring = null
+  if (internal.length) {
+    const count = graph.nodes.filter(n => localIDs.has(n.id)).length
+    const r = split ? Math.min(Math.max(58, count * 9), width * 0.1, height * 0.17) : Math.min(width / 2 - 130, height / 2 - 70)
+    // On a narrow canvas the ring keeps its labels for hover, so it can sit close to the edge.
+    const quiet = split && (count > 8 || width < 700)
+    ring = { r, quiet, cx: split ? width - r - (quiet ? 40 : 118) : width / 2, cy: split ? r + 62 : height / 2 - 5 }
+  }
   if (external.length) {
-    const r = Math.min(height * 0.35, split ? width * 0.25 : width / 2 - 125)
-    const cx = split ? width * 0.36 : width / 2
-    const cy = Math.min(height * 0.58, height - r - 50)
+    let r = Math.min(height * 0.39, split ? width * 0.25 : width / 2 - 150)
+    const cx = split ? width * 0.4 : width / 2
+    let cy = Math.min(height * 0.56, height - r - 46)
+    // External labels reach about 110px right of their node, and the ring's left labels about 100px left of it.
+    // Where those bands share rows, slide the semicircle down, then shrink it, until they clear.
+    if (ring && split) {
+      const bottom = ring.cy + ring.r + 24, left = ring.cx - ring.r - (ring.quiet ? 16 : 100)
+      const reach = () => {
+        const dy = Math.max(0, cy - bottom)
+        return dy >= r ? -Infinity : cx + Math.sqrt(r * r - dy * dy) + 110
+      }
+      while (reach() > left && cy + r < height - 46) cy += 4
+      while (reach() > left && r > 80) { r -= 4; cy = Math.min(cy, height - r - 46) }
+    }
     for (const remote of [false, true]) {
       const side = graph.nodes.filter(n => externalIDs.has(n.id) && (n.kind === 'remote') === remote).sort((a, b) => a.name.localeCompare(b.name))
       side.forEach((n, i) => {
         const y = -r + (i + 0.5) * 2 * r / side.length
         const x = Math.sqrt(Math.max(0, r * r - y * y)) * (remote ? 1 : -1)
-        nodes.push({ ...n, key: `external:${n.id}`, x: cx + x, y: cy + y, cx, cy, right: remote, compact: false, load: loads.get(n.id) ?? 0 })
+        // Below about 28px between rows there is no room for a second line with the rate.
+        nodes.push({ ...n, key: `external:${n.id}`, x: cx + x, y: cy + y, cx, cy, right: remote, compact: false, tight: 2 * r / side.length < 28, load: loads.get(n.id) ?? 0 })
       })
       arcs.push(`M${cx},${cy - r} A${r},${r} 0 0,${remote ? 1 : 0} ${cx},${cy + r}`)
       captions.push({ text: remote ? 'External' : 'On this Mac', x: cx + (remote ? 1 : -1) * r * 0.65, y: cy - r - 22 })
     }
   }
-  if (internal.length) {
-    const r = split ? Math.min(76, width * 0.095, height * 0.15) : Math.min(width / 2 - 130, height / 2 - 70)
-    const cx = split ? width - 155 : width / 2
-    const cy = split ? r + 55 : height / 2 - 5
-    const ring = graph.nodes.filter(n => localIDs.has(n.id)).sort((a, b) => a.name.localeCompare(b.name))
-    ring.forEach((n, i) => {
-      const angle = (i + 0.5) / ring.length * Math.PI * 2 - Math.PI / 2
+  if (ring) {
+    const { r, cx, cy } = ring
+    const members = graph.nodes.filter(n => localIDs.has(n.id)).sort((a, b) => a.name.localeCompare(b.name))
+    members.forEach((n, i) => {
+      const angle = (i + 0.5) / members.length * Math.PI * 2 - Math.PI / 2
       nodes.push({ ...n, key: `local:${n.id}`, x: cx + Math.cos(angle) * r, y: cy + Math.sin(angle) * r,
-        cx, cy, right: Math.cos(angle) >= 0, compact: split, quiet: split && ring.length > 8, load: loads.get(n.id) ?? 0 })
+        cx, cy, right: Math.cos(angle) >= 0, compact: split, quiet: ring.quiet, load: loads.get(n.id) ?? 0 })
     })
     circles.push({ cx, cy, r })
     captions.push({ text: 'Inside this Mac', x: cx, y: cy - r - 22 })
@@ -95,12 +114,12 @@ export function mountMonitoring(root) {
   root.classList.add('monitoring-board')
   const panel = document.createElement('div')
   panel.className = 'monitoring-root'
-  panel.dataset.palette = 'orange'
+  panel.dataset.palette = 'pantone'
   panel.innerHTML = `
     <div class="monitor-metrics">
-      <div><span class="metric-label">Download</span><strong data-metric="received">—</strong><svg class="metric-spark" data-spark="received" viewBox="0 0 72 18" aria-hidden="true"><path></path></svg></div>
-      <div><span class="metric-label">Upload</span><strong data-metric="sent">—</strong><svg class="metric-spark" data-spark="sent" viewBox="0 0 72 18" aria-hidden="true"><path></path></svg></div>
-      <div><span class="metric-label">Inside this Mac</span><strong data-metric="internalRate">—</strong><svg class="metric-spark" data-spark="internalRate" viewBox="0 0 72 18" aria-hidden="true"><path></path></svg></div>
+      <div><span class="metric-label">Download</span><strong data-metric="received">—</strong><svg class="metric-spark" data-spark="received" viewBox="0 0 72 18" preserveAspectRatio="none" aria-hidden="true"><path></path></svg></div>
+      <div><span class="metric-label">Upload</span><strong data-metric="sent">—</strong><svg class="metric-spark" data-spark="sent" viewBox="0 0 72 18" preserveAspectRatio="none" aria-hidden="true"><path></path></svg></div>
+      <div><span class="metric-label">Inside this Mac</span><strong data-metric="internalRate">—</strong><svg class="metric-spark" data-spark="internalRate" viewBox="0 0 72 18" preserveAspectRatio="none" aria-hidden="true"><path></path></svg></div>
       <div class="metric-count"><span class="metric-label">Connections</span><strong data-metric="connections">—</strong></div>
     </div>
     <div class="monitor-controls">
@@ -112,7 +131,7 @@ export function mountMonitoring(root) {
       </div>
     </div>
     <div class="monitor-body">
-      <div class="monitor-canvas"><div class="stage-heading"><span>Network</span><small></small></div><svg class="monitor-map" role="img" aria-label="Live network connections"></svg>
+      <div class="monitor-canvas"><div class="stage-heading"><small></small></div><svg class="monitor-map" role="img" aria-label="Live network connections"></svg>
         <canvas class="monitor-globe" role="img" aria-label="3D network sphere" tabindex="0" hidden></canvas>
         <div class="globe-controls" hidden><button data-orbit aria-pressed="true">Rotate</button><button data-reset>Reset</button></div>
         <p class="monitor-empty">Reading network counters…</p>
@@ -122,10 +141,6 @@ export function mountMonitoring(root) {
     </div>`
   root.append(panel)
   const map = d3.select(panel.querySelector('.monitor-map'))
-  const gradient = map.append('defs').append('linearGradient').attr('id', 'network-current')
-  gradient.append('stop').attr('offset', '0%').attr('stop-color', 'var(--node-ink)').attr('stop-opacity', 0.45)
-  gradient.append('stop').attr('offset', '55%').attr('stop-color', 'var(--accent)').attr('stop-opacity', 0.9)
-  gradient.append('stop').attr('offset', '100%').attr('stop-color', 'var(--accent)')
   const scene = map.append('g')
   const guides = scene.append('g').attr('class', 'monitor-guides')
   const paths = scene.append('g')
@@ -292,7 +307,7 @@ export function mountMonitoring(root) {
       .classed('carrying', l => visibleRate(total(l)) > 0).classed('dominant', l => dominant.has(l.id) && visibleRate(total(l)) > 0)
     merged.select('title').text(l => `${l.connections} connections · ${l.protocols.join('/')} · ${fresh() ? rate(total(l)) : '—'}`)
     merged.interrupt().transition().duration(650).style('opacity', 1).attr('d', geometry)
-      .attr('stroke-width', l => 0.6 + Math.sqrt(visibleRate(total(l)) / maxRate) * 4.5)
+      .attr('stroke-width', l => 0.8 + Math.sqrt(visibleRate(total(l)) / maxRate) * 5)
     const dots = peers.selectAll('g').data(layout.nodes, n => n.key)
     dots.exit().filter(function() { return !this.classList.contains('departing') }).classed('departing', true)
       .interrupt().transition().duration(500).style('opacity', 0).remove()
@@ -312,14 +327,14 @@ export function mountMonitoring(root) {
       .classed('cluster', n => Boolean(n.members)).classed('local', n => n.key.startsWith('local:')).attr('aria-label', n => `${n.name} · ${n.compact ? 'inside this Mac' : n.kind === 'remote' ? 'external' : 'on this Mac'}`)
     allDots.interrupt().transition().duration(650).style('opacity', 1)
       .attr('transform', n => { return `translate(${n.x},${n.y})` })
-    allDots.select('.node-core').attr('fill', color).attr('r', n => n.compact ? 3 : 4.6)
+    allDots.select('.node-core').attr('fill', color).attr('r', n => n.compact ? 3.5 : 5)
     allDots.select('.node-halo').attr('fill', color).attr('r', n => n.compact ? 9 : 11)
     allDots.select('title').text(n => n.name)
-    allDots.select('.peer-name').attr('x', n => n.right ? (n.compact ? 9 : 12) : (n.compact ? -9 : -12))
-      .attr('dy', n => !n.compact && visibleRate(n.load) > 0 ? '-0.2em' : '0.35em').attr('text-anchor', n => n.right ? 'start' : 'end')
-      .text(n => shortName(n, n.compact ? 14 : width < 740 ? 20 : 27))
+    allDots.select('.peer-name').attr('x', n => n.right ? (n.compact ? 8 : 12) : (n.compact ? -8 : -12))
+      .attr('dy', n => !n.compact && !n.tight && visibleRate(n.load) > 0 ? '-0.2em' : '0.35em').attr('text-anchor', n => n.right ? 'start' : 'end')
+      .text(n => shortName(n, n.compact ? 18 : width < 740 ? 20 : 27))
     allDots.select('.peer-rate').attr('x', n => n.right ? 13 : -13).attr('y', 13)
-      .attr('text-anchor', n => n.right ? 'start' : 'end').text(n => !n.compact && visibleRate(n.load) > 0 ? rate(n.load) : '')
+      .attr('text-anchor', n => n.right ? 'start' : 'end').text(n => !n.compact && !n.tight && visibleRate(n.load) > 0 ? rate(n.load) : '')
     // One group per connection; particles use the same interpolated path as the visible line.
     const moving = particles.selectAll('g').data(projected.links, l => l.id).join('g')
     moving.each(function(l) {

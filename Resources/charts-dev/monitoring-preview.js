@@ -28,6 +28,7 @@ function sample() {
 function tick() { step += 1; const value = sample(); window.SkyEyeCharts.render(value); return value }
 window.SkyEyeCharts.show('monitoring')
 tick()
+if (new URLSearchParams(location.search).has('3d')) document.querySelector('[data-view="3d"]').click()
 timer = setInterval(tick, 1000)
 window.SkyEyeMonitoringDemo = {
   tick,
