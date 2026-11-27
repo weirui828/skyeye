@@ -64,6 +64,8 @@ jobs:
           done
       - name: Installer safety tests
         run: python3 -m unittest discover -s scripts/tests -v
+      - name: Chart tests
+        run: node --test scripts/tests/monitoring.test.mjs
       - name: Core tests
         env:
           SKYEYE_TEST_PYTHON: ${{ steps.python.outputs.python-path }}

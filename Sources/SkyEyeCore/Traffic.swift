@@ -85,6 +85,7 @@ public enum Traffic {
         /// tcp4, tcp6, udp4 or udp6.
         public var proto: String
         public var localPort: Int
+        public var localIP: String
         public var ip: String
         public var port: Int
         public var state: String
@@ -93,11 +94,12 @@ public enum Traffic {
 
         public init(
             pid: Int32, proto: String = "tcp4", localPort: Int = 0, ip: String, port: Int,
-            state: String = "Established", bytesIn: UInt64 = 0, bytesOut: UInt64 = 0
+            state: String = "Established", bytesIn: UInt64 = 0, bytesOut: UInt64 = 0, localIP: String = ""
         ) {
             self.pid = pid
             self.proto = proto
             self.localPort = localPort
+            self.localIP = localIP
             self.ip = ip
             self.port = port
             self.state = state
@@ -162,10 +164,12 @@ public enum Traffic {
             case (_, .address(let ip, let port)):
                 guard let pid else { continue }
                 var localPort = 0
-                if case .address(_, let number) = local { localPort = number }
+                var localIP = ""
+                if case .address(let address, let number) = local { localPort = number; localIP = address }
                 flows.append(Flow(
                     pid: pid, proto: proto + family, localPort: localPort, ip: ip, port: port,
-                    state: String(fields[3]), bytesIn: UInt64(fields[4]) ?? 0, bytesOut: UInt64(fields[5]) ?? 0
+                    state: String(fields[3]), bytesIn: UInt64(fields[4]) ?? 0, bytesOut: UInt64(fields[5]) ?? 0,
+                    localIP: localIP
                 ))
             case (_, .any):
                 break

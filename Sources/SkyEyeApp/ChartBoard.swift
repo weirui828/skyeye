@@ -23,7 +23,7 @@ struct ChartBoard: NSViewRepresentable {
     let json: String
     /// `TrafficHistory.chartJSON()`: it changes between scans, and redraws only the chart that shows it.
     let history: String
-    /// "ports", "traffic" or "processes".
+    /// "ports", "traffic", "processes" or "monitoring".
     let tab: String
     let selected: Int32?
     let onSelect: (Int32) -> Void

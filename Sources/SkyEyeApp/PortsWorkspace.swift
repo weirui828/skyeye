@@ -168,7 +168,7 @@ final class PortsWindowController: NSObject, NSWindowDelegate {
     }
 }
 
-/// The menu's way in, with a count when something needs a look.
+/// The menu's way in, with a dot when something needs a look.
 struct PortsButton: View {
     @EnvironmentObject private var manager: ServiceManager
     @EnvironmentObject private var monitor: NetworkMonitor
@@ -178,20 +178,14 @@ struct PortsButton: View {
         Button {
             PortsWindowController.shared.show(manager: manager, monitor: monitor)
         } label: {
-            HStack(spacing: 4) {
-                Label("Ports", systemImage: "shield.lefthalf.filled")
-                if count > 0 {
-                    Text(String(count))
-                        .font(.caption2.weight(.bold))
-                        .monospacedDigit()
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(Tone.bad, in: Capsule())
+            Image(systemName: "shield.lefthalf.filled")
+                .overlay(alignment: .topTrailing) {
+                    if count > 0 {
+                        Circle().fill(Tone.bad).frame(width: 5, height: 5).offset(x: 3, y: -2)
+                    }
                 }
-            }
         }
-        .help(count > 0 ? "Open ports and network: \(count) need a look" : "Open ports and network")
+        .help(count > 0 ? "Ports — \(count) need a look" : "Ports — ports and network")
         .accessibilityLabel(count > 0 ? "Ports and network, \(count) need a look" : "Ports and network")
     }
 }
