@@ -55,7 +55,7 @@ export function layoutActivity(graph, width, height) {
   const externalIDs = new Set(external.flatMap(l => [l.from, l.to]))
   const localIDs = new Set(internal.flatMap(l => [l.from, l.to]))
   const split = external.length > 0 && internal.length > 0
-  const nodes = [], arcs = [], captions = [], circles = [], summaries = [], cards = []
+  const nodes = [], arcs = [], captions = [], circles = [], summaries = []
   const loads = new Map()
   for (const link of graph.links) for (const id of [link.from, link.to]) loads.set(id, (loads.get(id) ?? 0) + total(link))
   // The internal ring sits top right; place it first so the external semicircle can keep clear of it.
@@ -66,10 +66,10 @@ export function layoutActivity(graph, width, height) {
     // On a narrow canvas the ring keeps its labels for hover, so it can sit close to the edge.
     const quiet = split && (count > 8 || width < 700)
     ring = { r, quiet, cx: split ? width - r - (quiet ? 40 : 118) : width / 2, cy: split ? r + 62 : height / 2 - 5 }
-    // Beside the semicircle the ring sits on its own card, padded for its labels.
+    // The area the ring and its labels take up beside the semicircle; nothing is drawn for it.
     if (split) {
       const pad = quiet ? 24 : 104
-      ring.card = { x: ring.cx - r - pad, y: ring.cy - r - 44, width: 2 * (r + pad), height: 2 * r + 72 }
+      ring.area = { x: ring.cx - r - pad, y: ring.cy - r - 44, width: 2 * (r + pad), height: 2 * r + 72 }
     }
   }
   if (external.length) {
@@ -79,7 +79,7 @@ export function layoutActivity(graph, width, height) {
     // External labels reach about 110px right of their node, and the ring's left labels about 100px left of it.
     // Where those bands share rows, slide the semicircle down, then shrink it, until they clear.
     if (ring && split) {
-      const bottom = ring.card.y + ring.card.height, left = ring.card.x + 8
+      const bottom = ring.area.y + ring.area.height, left = ring.area.x + 8
       const reach = () => {
         const dy = Math.max(0, cy - bottom)
         return dy >= r ? -Infinity : cx + Math.sqrt(r * r - dy * dy) + 110
@@ -108,11 +108,10 @@ export function layoutActivity(graph, width, height) {
         cx, cy, right: Math.cos(angle) >= 0, compact: split, quiet: ring.quiet, load: loads.get(n.id) ?? 0 })
     })
     circles.push({ cx, cy, r })
-    if (ring.card) cards.push(ring.card)
     captions.push({ text: 'Inside this Mac', x: cx, y: cy - r - 22 })
     summaries.push({ text: `${internal.reduce((sum, l) => sum + l.connections, 0)} connections`, x: cx, y: cy + 4 })
   }
-  return { nodes, arcs, circles, captions, summaries, cards }
+  return { nodes, arcs, circles, captions, summaries }
 }
 
 export function mountMonitoring(root) {
@@ -149,7 +148,6 @@ export function mountMonitoring(root) {
   root.append(panel)
   const map = d3.select(panel.querySelector('.monitor-map'))
   const scene = map.append('g')
-  const cardLayer = scene.append('g').attr('class', 'monitor-cards')
   const guides = scene.append('g').attr('class', 'monitor-guides')
   const paths = scene.append('g')
   const particles = scene.append('g').attr('class', 'monitor-particles').attr('aria-hidden', 'true')
@@ -345,8 +343,6 @@ export function mountMonitoring(root) {
 
   function paintFlat() {
     const layout = layoutActivity(projected, width, height)
-    cardLayer.selectAll('rect').data(layout.cards).join('rect').attr('class', 'monitor-card')
-      .attr('x', d => d.x).attr('y', d => d.y).attr('width', d => d.width).attr('height', d => d.height).attr('rx', 14)
     guides.selectAll('path').data(layout.arcs).join('path').attr('d', d => d)
     guides.selectAll('circle').data(layout.circles).join('circle').attr('cx', d => d.cx).attr('cy', d => d.cy).attr('r', d => d.r)
     guides.selectAll('text').data(layout.captions).join('text').attr('x', d => d.x).attr('y', d => d.y)
