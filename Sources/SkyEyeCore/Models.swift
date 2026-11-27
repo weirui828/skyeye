@@ -118,12 +118,14 @@ public struct Settings: Codable, Hashable, Sendable {
     /// Ask the public whois registries who owns an address that reverse DNS doesn't name.
     /// Off by default: it sends the address to a third party.
     public var whoisLookups = false
+    /// Scan the network every minute in the background and notify about suspicious activity.
+    public var watchNetwork = true
 
     public init() {}
 
     enum CodingKeys: String, CodingKey {
         case requireApproval, notifications, shell, loadShellProfile, keepRunningOnQuit, logRetentionDays
-        case autoStartMode, autoStartServices, whoisLookups
+        case autoStartMode, autoStartServices, whoisLookups, watchNetwork
     }
 
     public init(from decoder: Decoder) throws {
@@ -137,6 +139,7 @@ public struct Settings: Codable, Hashable, Sendable {
         autoStartMode = try c.decodeIfPresent(AutoStartMode.self, forKey: .autoStartMode) ?? .none
         autoStartServices = try c.decodeIfPresent([String].self, forKey: .autoStartServices) ?? []
         whoisLookups = try c.decodeIfPresent(Bool.self, forKey: .whoisLookups) ?? false
+        watchNetwork = try c.decodeIfPresent(Bool.self, forKey: .watchNetwork) ?? true
     }
 }
 

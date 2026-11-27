@@ -250,6 +250,16 @@ final class OutgoingTests: XCTestCase {
         XCTAssertEqual(Outgoing.ownerByPrefix("17.188.143.3"), "Apple")
         XCTAssertEqual(Outgoing.ownerByPrefix("192.168.1.40"), "Local network")
         XCTAssertEqual(Outgoing.ownerByPrefix("fe80:18::e464:847e:88b4:3f0"), "Local network")
+        // Generated cloud ranges, including IPv6 CIDRs that are not text prefixes.
+        XCTAssertEqual(Outgoing.ownerByPrefix("170.106.201.247"), "Tencent Cloud")
+        XCTAssertEqual(Outgoing.ownerByPrefix("49.51.79.75"), "Tencent Cloud")
+        XCTAssertEqual(Outgoing.ownerByPrefix("240d:c000:1000:500:0:9dcf:1b11:5989"), "Tencent Cloud")
+        XCTAssertEqual(Outgoing.ownerByPrefix("81.68.10.1"), "Tencent")
+        XCTAssertEqual(Outgoing.ownerByPrefix("47.250.12.193"), "Alibaba Cloud")
+        // The hand-kept table still wins, and addresses outside every range stay unknown.
+        XCTAssertEqual(Outgoing.ownerByPrefix("2001:4860:4860::8888"), "Google")
+        XCTAssertNil(Outgoing.ownerByPrefix("203.0.113.9"))
+        XCTAssertNil(Outgoing.ownerByPrefix("2001:db8::1"))
         XCTAssertNil(Outgoing.ownerByPrefix("18.97.36.58"))
         // An iPhone on the same Wi-Fi, from a global IPv6 address in the Mac's own /64.
         let lan = Outgoing.localPrefixes(

@@ -3,6 +3,8 @@ import { mountGlobe } from './globe.js'
 import { flowPhase, shortName } from './flow-style.js'
 
 const rate = n => `${bytes(Math.max(0, n))}/s`
+// A moving pulse: a short stretch of line, PULSE_LENGTH pixels long.
+const PULSE_LENGTH = 44
 const total = link => link.sent + link.received
 const color = node => node.key?.startsWith('local:') ? 'var(--local)' : node.kind === 'remote' ? 'var(--accent)' : 'var(--node-ink)'
 
@@ -141,7 +143,7 @@ export function mountMonitoring(root) {
         <div class="globe-controls" hidden><button data-orbit aria-pressed="true">Rotate</button><button data-reset>Reset</button></div>
         <div class="monitor-empty"><i class="empty-pulse" aria-hidden="true"></i><b>Reading network counters…</b><span>The first sample sets a baseline. Rates appear a second later.</span><button class="empty-action" hidden>Clear search</button></div>
         <div class="monitor-paused" hidden>Paused · showing the last sample</div>
-        <div class="monitor-legend"><span class="legend-local">Inside this Mac</span><span class="legend-remote">External</span><span class="monitor-freshness">Waiting for samples</span></div>
+        <div class="monitor-legend"><span class="legend-local">Inside this Mac</span><span class="legend-remote">External</span><span class="legend-pulse">Traffic moving now</span><span class="monitor-freshness">Waiting for samples</span></div>
       </div>
       <aside class="monitor-detail"><div class="detail-heading"></div><div class="detail-content"></div></aside>
     </div>`
@@ -158,7 +160,8 @@ export function mountMonitoring(root) {
   let width = 800, height = 600, destroyed = false, animation = 0, lastTick = 0
   let lastFreshness = null
   const positions = new Map()
-  let trend = [], showQuiet = false
+  let trend = [], showQuiet = false, alerts = []
+  const post = message => window.webkit?.messageHandlers?.skyeye?.postMessage(message)
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
   const chosen = () => selected ?? hovered
   const fresh = () => sample && sample.active !== false && Date.now() - sample.at < 5000
@@ -224,6 +227,30 @@ export function mountMonitoring(root) {
     }
   }
 
+  // Alerts from SkyEye's background scans, with what the user can do about each program.
+  function alertSection() {
+    const section = document.createElement('section')
+    section.className = 'monitor-alerts'
+    const title = document.createElement('h4')
+    title.textContent = alerts.length === 1 ? '1 alert' : `${alerts.length} alerts`
+    section.append(title)
+    for (const alert of alerts) {
+      const item = document.createElement('div'); item.className = 'alert-item'
+      const name = document.createElement('b'); name.textContent = alert.program
+      const text = document.createElement('p'); text.textContent = alert.text
+      const actions = document.createElement('div'); actions.className = 'alert-actions'
+      actions.append(button('Trust', () => post({ type: 'alert', action: 'trust', program: alert.program })))
+      if (alert.muted) {
+        const muted = document.createElement('span'); muted.textContent = 'Muted for a day'; actions.append(muted)
+      } else {
+        actions.append(button('Mute for a day', () => post({ type: 'alert', action: 'mute', program: alert.program })))
+      }
+      item.append(name, text, actions)
+      section.append(item)
+    }
+    return section
+  }
+
   function details() {
     if (!sample || !projected) return
     const node = projected.nodes.find(n => n.id === selected)
@@ -243,7 +270,7 @@ export function mountMonitoring(root) {
       }).sort((a, b) => b.total - a.total)
     }
     const maximum = Math.max(1, ...items.map(i => visibleRate(i.total)))
-    const key = JSON.stringify([selected, focus, showQuiet, node?.members?.length, link?.hosts.length, items.map(i => i.id), hidden, projected.links.length])
+    const key = JSON.stringify([selected, focus, showQuiet, node?.members?.length, link?.hosts.length, items.map(i => i.id), hidden, projected.links.length, alerts.map(a => a.id + a.muted)])
     if (key === detailKey) {
       fillRows(items, maximum)
       if (link) content.querySelectorAll('.detail-direction b').forEach((b, i) => { b.textContent = shownRate(i ? link.received : link.sent) })
@@ -289,6 +316,7 @@ export function mountMonitoring(root) {
       if (link.hosts.length > 80) { const p = document.createElement('p'); p.className = 'detail-meta'; p.textContent = `+${link.hosts.length - 80} addresses`; content.append(p) }
       return
     }
+    if (!node && alerts.length) content.append(alertSection())
     for (const item of items) {
       content.append(meterRow(item, () => { selected = item.id; detailKey = ''; details(); highlight() }))
     }
@@ -365,7 +393,7 @@ export function mountMonitoring(root) {
     const names = new Map(projected.nodes.map(n => [n.id, n.name]))
     merged.attr('data-tip', l => `${names.get(l.from)} → ${names.get(l.to)}  ${shownRate(l.sent)}\n${names.get(l.to)} → ${names.get(l.from)}  ${shownRate(l.received)}\n${l.connections} connections · ${l.protocols.join('/')}`)
     merged.interrupt().transition().duration(650).style('opacity', 1).attr('d', geometry)
-      .attr('stroke-width', l => 0.8 + Math.sqrt(visibleRate(total(l)) / maxRate) * 5)
+      .attr('stroke-width', l => 0.6 + Math.sqrt(visibleRate(total(l)) / maxRate) * 2.6)
     const dots = peers.selectAll('g').data(layout.nodes, n => n.key)
     dots.exit().filter(function() { return !this.classList.contains('departing') }).classed('departing', true)
       .interrupt().transition().duration(500).style('opacity', 0).remove()
@@ -398,8 +426,8 @@ export function mountMonitoring(root) {
     const moving = particles.selectAll('g').data(projected.links, l => l.id).join('g')
     moving.each(function(l) {
       const group = d3.select(this).classed('local', l.local)
-      group.selectAll('path').data([0, 1]).join('path').attr('class', 'flow-streak')
-      group.selectAll('circle').data([0, 1]).join('circle').attr('r', 2.1)
+      // One pulse per direction.
+      group.selectAll('path').data([true, false]).join('path').attr('class', 'flow-pulse')
     })
   }
 
@@ -482,28 +510,24 @@ export function mountMonitoring(root) {
     const pathByID = new Map(paths.selectAll('path').nodes().map(path => [d3.select(path).datum().id, path]))
     particles.selectAll('g').each(function(l) {
       if (!isFresh || reducedMotion.matches || visibleRate(total(l)) <= 0) {
-        d3.select(this).selectAll('circle, path').attr('visibility', 'hidden')
+        d3.select(this).selectAll('path').attr('visibility', 'hidden')
         return
       }
       const path = pathByID.get(l.id)
       const length = path?.getTotalLength() ?? 0
-      d3.select(this).selectAll('circle').each(function(index) {
-        const forward = index === 0
+      d3.select(this).selectAll('path').each(function(forward) {
         const speed = visibleRate(forward ? l.sent : l.received)
-        const dot = d3.select(this)
-        const streak = d3.select(this.parentNode).selectAll('path').filter(d => d === index)
-        if (!length || speed <= 0 || reducedMotion.matches || !isFresh) { dot.attr('visibility', 'hidden'); streak.attr('visibility', 'hidden'); return }
-        dot.attr('visibility', 'visible')
+        const pulse = d3.select(this)
+        if (!length || speed <= 0) { pulse.attr('visibility', 'hidden'); return }
         const phase = flowPhase(time, speed, l.id, !forward)
-        const point = path.getPointAtLength(phase * length)
-        const opacity = Math.min(1, phase * 12, (1 - phase) * 12)
-        dot.attr('cx', point.x).attr('cy', point.y).attr('opacity', opacity)
-        const tail = Array.from({ length: 7 }, (_, i) => {
-          const t = Math.max(0, Math.min(1, phase - (forward ? 1 : -1) * (1 - i / 6) * 0.085))
-          const p = path.getPointAtLength(t * length)
+        // From the head back along the line, PULSE_LENGTH pixels on screen, clipped to the line's ends.
+        const head = phase * length, tail = head - (forward ? 1 : -1) * Math.min(PULSE_LENGTH, length * 0.4)
+        const points = Array.from({ length: 9 }, (_, i) => {
+          const p = path.getPointAtLength(Math.max(0, Math.min(length, tail + (head - tail) * i / 8)))
           return `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`
         }).join(' ')
-        streak.attr('visibility', 'visible').attr('d', tail).attr('opacity', opacity * 0.55)
+        const fade = Math.min(1, phase * 12, (1 - phase) * 12)
+        pulse.attr('visibility', 'visible').attr('d', points).attr('opacity', fade)
       })
     })
   }
@@ -517,6 +541,11 @@ export function mountMonitoring(root) {
   })
   observer.observe(panel.querySelector('.monitor-canvas'))
   return {
+    setAlerts(value) {
+      alerts = Array.isArray(value?.alerts) ? value.alerts : []
+      detailKey = ''
+      if (sample) details()
+    },
     update(value) {
       if (!value.nodes || !value.links) return
       if (value.active !== false && !value.warmingUp && value.at > (trend.at(-1)?.at ?? 0)) {

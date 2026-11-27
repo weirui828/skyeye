@@ -162,7 +162,9 @@ final class MonitoringWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private let activity = ActivityMonitor()
 
-    func show(manager: ServiceManager) {
+    func show(manager: ServiceManager, monitor: NetworkMonitor) {
+        monitor.markOpened()
+        monitor.markAlertsSeen()
         if window == nil {
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 1200, height: 820),
@@ -171,7 +173,9 @@ final class MonitoringWindowController: NSObject, NSWindowDelegate {
             window.title = "SkyEye — Monitoring"
             window.isReleasedWhenClosed = false
             window.contentMinSize = NSSize(width: 860, height: 600)
-            window.contentView = NSHostingView(rootView: MonitoringWorkspace(activity: activity).environmentObject(manager))
+            window.contentView = NSHostingView(
+                rootView: MonitoringWorkspace(activity: activity, monitor: monitor).environmentObject(manager)
+            )
             window.delegate = self
             window.center()
             if !Preferences.isCustomHome {
@@ -179,6 +183,7 @@ final class MonitoringWindowController: NSObject, NSWindowDelegate {
                 window.setFrameAutosaveName("SkyEyeMonitoring")
             }
             self.window = window
+            monitor.alertsVisible = { [weak window] in window?.isVisible == true }
         }
         activity.start(manager: manager)
         NSApp.activate(ignoringOtherApps: true)
@@ -188,21 +193,30 @@ final class MonitoringWindowController: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) { activity.stop() }
 }
 
+/// The menu's way in, with a dot while there are alerts the user hasn't seen.
 struct MonitoringButton: View {
     @EnvironmentObject private var manager: ServiceManager
+    @EnvironmentObject private var monitor: NetworkMonitor
 
     var body: some View {
-        Button { MonitoringWindowController.shared.show(manager: manager) } label: {
+        let count = monitor.unseenAlerts
+        Button { MonitoringWindowController.shared.show(manager: manager, monitor: monitor) } label: {
             Image(systemName: "waveform.path.ecg")
+                .overlay(alignment: .topTrailing) {
+                    if count > 0 {
+                        Circle().fill(Tone.bad).frame(width: 5, height: 5).offset(x: 3, y: -2)
+                    }
+                }
         }
-        .help("Monitoring")
-        .accessibilityLabel("Monitoring")
+        .help(count > 0 ? "Monitoring — \(count) new alerts" : "Monitoring")
+        .accessibilityLabel(count > 0 ? "Monitoring, \(count) new alerts" : "Monitoring")
     }
 }
 
 private struct MonitoringWorkspace: View {
     @EnvironmentObject private var manager: ServiceManager
     @ObservedObject var activity: ActivityMonitor
+    @ObservedObject var monitor: NetworkMonitor
 
     var body: some View {
         VStack(spacing: 0) {
@@ -221,7 +235,13 @@ private struct MonitoringWorkspace: View {
             .padding(.horizontal, 24).padding(.vertical, 8)
             Divider()
             if let directory = ChartBoard.directory {
-                ChartBoard(directory: directory, json: activity.json, history: "{}", tab: "monitoring", selected: nil, onSelect: { _ in })
+                ChartBoard(
+                    directory: directory, json: activity.json, history: monitor.alertsJSON, tab: "monitoring",
+                    selected: nil, onSelect: { _ in },
+                    onAlertAction: { action, program in
+                        if action == "trust" { monitor.trust(program) } else { monitor.mute(program) }
+                    }
+                )
             } else {
                 Text("Build the app bundle to view monitoring.").foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -22,11 +22,14 @@ struct ChartBoard: NSViewRepresentable {
     /// `NetworkScan.chartJSON()`.
     let json: String
     /// `TrafficHistory.chartJSON()`: it changes between scans, and redraws only the chart that shows it.
+    /// On the monitoring tab it carries `NetworkAlerts.chartJSON` instead.
     let history: String
     /// "ports", "traffic", "processes" or "monitoring".
     let tab: String
     let selected: Int32?
     let onSelect: (Int32) -> Void
+    /// The Monitoring page's alert buttons: ("trust" or "mute", program).
+    var onAlertAction: ((String, String) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -50,6 +53,7 @@ struct ChartBoard: NSViewRepresentable {
 
     func updateNSView(_ view: WKWebView, context: Context) {
         context.coordinator.onSelect = onSelect
+        context.coordinator.onAlertAction = onAlertAction
         context.coordinator.show(json: json, history: history, tab: tab, selected: selected)
     }
 
@@ -61,6 +65,7 @@ struct ChartBoard: NSViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         weak var view: WKWebView?
         var onSelect: ((Int32) -> Void)?
+        var onAlertAction: ((String, String) -> Void)?
         private var isReady = false
         private var json = ""
         private var history = ""
@@ -114,6 +119,10 @@ struct ChartBoard: NSViewRepresentable {
                 guard let pid = (body["pid"] as? NSNumber)?.int32Value else { return }
                 drawnSelection = pid
                 onSelect?(pid)
+            case "alert":
+                guard let action = body["action"] as? String, ["trust", "mute"].contains(action),
+                      let program = body["program"] as? String else { return }
+                onAlertAction?(action, program)
             default:
                 break
             }

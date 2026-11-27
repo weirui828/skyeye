@@ -116,7 +116,10 @@ function section(card, c) {
 function draw() {
   if (!state.scan) return
   if (state.tab === 'monitoring') {
-    if (!monitoring) monitoring = mountMonitoring(board)
+    if (!monitoring) {
+      monitoring = mountMonitoring(board)
+      if (alerts) monitoring.setAlerts(alerts)
+    }
     monitoring.update(state.scan)
     return
   }
@@ -158,7 +161,14 @@ function render(scan) {
   draw()
 }
 
+// On the monitoring tab this channel carries the network alerts instead of the traffic history.
+let alerts = null
 function history(samples) {
+  if (state.tab === 'monitoring') {
+    alerts = samples
+    monitoring?.setAlerts(samples)
+    return
+  }
   state.history = samples
   redraw('ridgeline')
 }

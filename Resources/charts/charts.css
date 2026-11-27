@@ -158,9 +158,9 @@ rect.leaf:hover, rect.leaf.sel { stroke: var(--ink); }
 /* Live monitoring */
 #board.monitoring-board { height: 100vh; padding: 0; overflow: hidden; }
 .monitoring-root {
-  /* Pantone 3278 C (external), 2728 C (inside this Mac), Black 6 C (ink); screen values sampled from pantone.com swatches. */
+  /* Pantone 3278 C (external), 2728 C (inside this Mac), Cool Gray 11 C (moving traffic), Black 6 C (ink); screen values sampled from pantone.com swatches. */
   --card: #ffffff; --ink: #10181e; --muted: #7b8086; --edge: #eceef0;
-  --wash: #f4f5f7; --accent: #009c77; --local: #0147ba; --node-ink: #10181e; --thread: #c3c7cc;
+  --wash: #f4f5f7; --accent: #009c77; --local: #0147ba; --pulse: #53575a; --node-ink: #10181e; --thread: #c3c7cc;
   height: 100%; display: flex; flex-direction: column; background: var(--card); color: var(--ink); color-scheme: light;
 }
 .monitor-metrics { display: flex; gap: 40px; padding: 20px 30px 16px; border-bottom: 1px solid var(--edge); }
@@ -224,10 +224,8 @@ rect.leaf:hover, rect.leaf.sel { stroke: var(--ink); }
 .monitor-peer:hover .node-halo, .monitor-peer.picked .node-halo, .monitor-peer:focus .node-halo { opacity: .1; }
 .monitor-peer:hover text, .monitor-peer.picked text { fill: var(--ink); }
 .monitor-peer.dim { opacity: .2 !important; }
-.monitor-particles { pointer-events: none; fill: var(--accent); }
-.monitor-particles .local { fill: var(--local); }
-.flow-streak { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; }
-.monitor-particles .local .flow-streak { stroke: var(--local); }
+.monitor-particles { pointer-events: none; fill: var(--pulse); }
+.flow-pulse { fill: none; stroke: var(--pulse); stroke-width: 1.6; stroke-linecap: round; }
 .monitor-particles .dim { opacity: .08; }
 .monitor-center { pointer-events: none; text-anchor: middle; }
 .monitor-center text { fill: var(--muted); font-size: 11px; paint-order: stroke; stroke: var(--card); stroke-width: 7px; }
@@ -235,6 +233,7 @@ rect.leaf:hover, rect.leaf.sel { stroke: var(--ink); }
 .monitor-legend { position: absolute; bottom: 18px; left: 30px; right: 24px; display: flex; gap: 20px; color: var(--muted); font-size: 11px; }
 .monitor-legend .legend-local::before, .monitor-legend .legend-remote::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--local); margin: 0 7px 0 0; vertical-align: -0.5px; }
 .monitor-legend .legend-remote::before { background: var(--accent); }
+.monitor-legend .legend-pulse::before { content: ''; display: inline-block; width: 16px; height: 1.6px; border-radius: 2px; background: var(--pulse); margin: 0 7px 0 0; vertical-align: 3px; }
 .monitor-freshness { margin-left: auto; opacity: .7; }
 .monitor-empty { position: absolute; top: 40%; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; color: var(--muted); font-size: 12px; }
 .monitor-empty[hidden] { display: none; }
@@ -266,6 +265,14 @@ rect.leaf:hover, rect.leaf.sel { stroke: var(--ink); }
 .activity-row:hover .row-names b { color: var(--local); }
 .monitoring-root .quiet-toggle { padding: 16px 0 10px; font-size: 11px; font-weight: 500; color: var(--muted); }
 .monitoring-root .quiet-toggle:hover { color: var(--ink); }
+.monitor-alerts { margin: 4px 0 8px; padding: 12px 14px; border-radius: 10px; background: #fdf1f0; border: 1px solid #f6d4d1; }
+.monitor-alerts h4 { margin: 0 0 8px; font-size: 11px; font-weight: 600; color: #b3261e; text-transform: uppercase; letter-spacing: .4px; }
+.alert-item + .alert-item { margin-top: 10px; padding-top: 10px; border-top: 1px solid #f6d4d1; }
+.alert-item b { display: block; font-size: 13px; font-weight: 600; }
+.alert-item p { margin: 2px 0 6px; font-size: 12px; line-height: 1.4; color: var(--ink); overflow-wrap: anywhere; }
+.alert-actions { display: flex; gap: 12px; align-items: center; font-size: 11px; color: var(--muted); }
+.monitoring-root .alert-actions button { padding: 0; font-size: 11px; font-weight: 500; color: var(--local); }
+.monitoring-root .alert-actions button:hover { text-decoration: underline; }
 .detail-direction { font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
 .detail-host { font: 11px/1.6 ui-monospace, monospace; color: var(--muted); overflow-wrap: anywhere; }
 @media (max-width: 960px) {

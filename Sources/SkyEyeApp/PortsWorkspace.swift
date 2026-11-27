@@ -16,10 +16,27 @@ final class NetworkMonitor: ObservableObject {
     private var timer: Timer?
     private var sampler: Timer?
     private var recorder = Traffic.Recorder()
+    /// Alerts that hold as of the last scan, and the Monitoring page's JSON for them.
+    @Published private(set) var alerts: [NetworkAlert] = []
+    @Published private(set) var alertsJSON = #"{"alerts":[]}"#
+    /// Alerts the user has not yet seen on the Monitoring page.
+    @Published private(set) var unseenAlerts = 0
+    /// Called with each alert that should make a notification.
+    var onAlert: ((NetworkAlert) -> Void)?
+    /// Whether the Monitoring window is on screen: alerts it shows count as seen.
+    var alertsVisible: () -> Bool = { false }
+    private var alertState = AlertState()
+    private var seenAlerts = Set<String>()
+    private let alertsURL: URL
+    private var watcher: Timer?
 
     init(manager: ServiceManager) {
         self.manager = manager
         scanner = NetworkScanner(storeURL: manager.paths.root.appendingPathComponent("network.json"))
+        alertsURL = manager.paths.root.appendingPathComponent("network-alerts.json")
+        if let data = try? Data(contentsOf: alertsURL), let saved = try? JSONCoding.decoder.decode(AlertState.self, from: data) {
+            alertState = saved
+        }
     }
 
     /// High-risk programs plus programs whose connections raised an alert, as of the last scan.
@@ -59,6 +76,7 @@ final class NetworkMonitor: ObservableObject {
                         scannedAt: listening.scannedAt, tree: listening.tree, traffic: traffic.programs, local: traffic.local
                     )
                     self.record(traffic.totals, at: sampledAt)
+                    self.evaluateAlerts(talkers: talkers, traffic: traffic.programs, at: listening.scannedAt)
                     self.isScanning = false
                 }
             }
@@ -91,17 +109,82 @@ final class NetworkMonitor: ObservableObject {
 
     private static let openedKey = "portsPageOpened"
 
+    /// Ports or Monitoring was opened, so the user has seen what a scan does.
+    func markOpened() { Preferences.store.set(true, forKey: Self.openedKey) }
+
+    /// A scan a minute while "Watch the network" is on, with or without a window open.
+    func startWatching() {
+        watcher?.invalidate()
+        let watcher = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.manager.config.settings.watchNetwork else { return }
+                self.rescanInBackground(after: 50)
+            }
+        }
+        RunLoop.main.add(watcher, forMode: .common)
+        self.watcher = watcher
+    }
+
+    // MARK: Alerts
+
+    private func evaluateAlerts(talkers: [Talker], traffic: [TrafficProgram], at now: Date) {
+        guard manager.config.settings.watchNetwork else {
+            alerts = []
+            refreshAlerts(now: now)
+            return
+        }
+        let result = NetworkAlerts.evaluate(talkers: talkers, traffic: traffic, state: alertState, now: now)
+        alertState = result.state
+        alerts = result.current
+        saveAlerts()
+        refreshAlerts(now: now)
+        if manager.config.settings.notifications { result.fresh.forEach { onAlert?($0) } }
+    }
+
+    private func refreshAlerts(now: Date = Date()) {
+        alertsJSON = NetworkAlerts.chartJSON(alerts, muted: alertState.mutedUntil, now: now)
+        if alertsVisible() { seenAlerts.formUnion(alerts.map(\.id)) }
+        unseenAlerts = alerts.filter { !seenAlerts.contains($0.id) }.count
+    }
+
+    /// The Monitoring page is showing the alerts.
+    func markAlertsSeen() {
+        seenAlerts.formUnion(alerts.map(\.id))
+        unseenAlerts = 0
+    }
+
+    /// No more alerts about this program.
+    func trust(_ program: String) {
+        alertState.trusted.insert(program)
+        alerts.removeAll { $0.program == program }
+        saveAlerts()
+        refreshAlerts()
+    }
+
+    /// No notifications about this program for a day; its alerts stay listed.
+    func mute(_ program: String) {
+        alertState.mutedUntil[program] = Date().addingTimeInterval(NetworkAlerts.muteFor)
+        saveAlerts()
+        refreshAlerts()
+    }
+
+    private func saveAlerts() {
+        guard let data = try? JSONCoding.encoder.encode(alertState) else { return }
+        try? data.write(to: alertsURL, options: .atomic)
+        chmod(alertsURL.path, 0o600)
+    }
+
     /// A scan nobody asked for, to keep the menu's count current. A scan asks every listening port what it is,
     /// so SkyEye does this on its own only once the user has opened the page and so has seen what it does.
-    func rescanInBackground() {
+    func rescanInBackground(after age: TimeInterval = 60) {
         guard Preferences.store.bool(forKey: Self.openedKey) else { return }
-        rescanIfStale()
+        rescanIfStale(after: age)
     }
 
     /// Keeps the page current while its window is open: a full scan every `interval`, and a traffic sample every `sampling`.
     func startPolling(every interval: TimeInterval = 30, sampling: TimeInterval = 10) {
         stopPolling()
-        Preferences.store.set(true, forKey: Self.openedKey)
+        markOpened()
         // Samples from before the window was closed would draw as one long flat stretch: start the chart over.
         if let last = recorder.history.times.last, Date().timeIntervalSince(last) > 60 {
             recorder = Traffic.Recorder()
